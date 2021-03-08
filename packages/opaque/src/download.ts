@@ -24,14 +24,13 @@ import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 
 export type DownloadConfig = {
 	storageNode: string
-	metadataNode: string
 
 	crypto: CryptoMiddleware
-	network: NetworkMiddleware
+	net: NetworkMiddleware
 
-	queueSize: {
-		net: number
-		decrypt: number
+	queueSize?: {
+		net?: number
+		decrypt?: number
 	}
 }
 
@@ -84,8 +83,6 @@ export class Download extends EventTarget implements IDownloadEvents {
 		return this._sizeOnFS
 	}
 
-	_progress = { network: 0, decrypt: 0 }
-
 	_downloadUrl?: string
 	_metadata?: FileMeta
 
@@ -122,6 +119,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 		super()
 
 		this.config = config
+		this.config.queueSize = this.config.queueSize || {}
 		this.config.queueSize.net = this.config.queueSize.net || 3
 		this.config.queueSize.decrypt = this.config.queueSize.decrypt || blocksPerPart
 
@@ -160,7 +158,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 
 		const d = this
 
-		const downloadUrlRes = await d.config.network
+		const downloadUrlRes = await d.config.net
 			.POST(
 				d.config.storageNode + "/api/v1/download",
 				undefined,
@@ -191,7 +189,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 			await this.downloadUrl()
 		}
 
-		const metadataRes = await d.config.network
+		const metadataRes = await d.config.net
 			.GET(
 				this._downloadUrl + "/metadata",
 				undefined,
@@ -230,7 +228,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 		this._started = true
 		this._timestamps.start = Date.now()
 
-		const ping = await this.config.network
+		const ping = await this.config.net
 			.GET(this.config.storageNode + "", undefined, undefined, async (d) =>
 				new TextDecoder("utf8").decode(await new Response(d).arrayBuffer()),
 			)
@@ -266,8 +264,8 @@ export class Download extends EventTarget implements IDownloadEvents {
 			}),
 		)
 
-		const netQueue = new OQ<void>(this.config.queueSize.net)
-		const decryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize.decrypt)
+		const netQueue = new OQ<void>(this.config.queueSize!.net)
+		const decryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize!.decrypt)
 
 		d._netQueue = netQueue
 		d._decryptQueue = decryptQueue
@@ -295,7 +293,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 
 						d.dispatchEvent(new DownloadPartStartedEvent({ index: partIndex }))
 
-						const res = await d.config.network
+						const res = await d.config.net
 							.GET(
 								downloadUrl + "/file",
 								{
@@ -308,7 +306,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 							)
 							.catch(d._reject)
 
-						if (!res) {
+						if (!res || !res.data) {
 							return
 						}
 

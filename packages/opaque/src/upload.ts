@@ -24,14 +24,13 @@ import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 
 export type UploadConfig = {
 	storageNode: string
-	metadataNode: string
 
 	crypto: CryptoMiddleware
-	network: NetworkMiddleware
+	net: NetworkMiddleware
 
-	queueSize: {
-		encrypt: number
-		net: number
+	queueSize?: {
+		encrypt?: number
+		net?: number
 	}
 }
 
@@ -109,8 +108,6 @@ export class Upload extends EventTarget implements IUploadEvents {
 		return this._sizeOnFS
 	}
 
-	_progress = { network: 0, decrypt: 0 }
-
 	_name: string
 	_path: string
 	_metadata: FileMeta
@@ -153,6 +150,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 		super()
 
 		this.config = config
+		this.config.queueSize = this.config.queueSize || {}
 		this.config.queueSize.encrypt = this.config.queueSize.encrypt || 3
 		this.config.queueSize.net = this.config.queueSize.net || 1
 
@@ -215,7 +213,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 		this._started = true
 		this._timestamps.start = Date.now()
 
-		const ping = await this.config.network
+		const ping = await this.config.net
 			.GET(this.config.storageNode + "", undefined, undefined, async (d) =>
 				new TextDecoder("utf8").decode(await new Response(d).arrayBuffer()),
 			)
@@ -246,7 +244,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 			},
 		})
 
-		await u.config.network.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(u._reject)
+		await u.config.net.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(u._reject)
 
 		u.dispatchEvent(
 			new UploadStartedEvent({
@@ -256,8 +254,8 @@ export class Upload extends EventTarget implements IUploadEvents {
 			}),
 		)
 
-		const encryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize.net, Number.MAX_SAFE_INTEGER)
-		const netQueue = new OQ<Uint8Array | undefined>(this.config.queueSize.encrypt)
+		const encryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize!.net, Number.MAX_SAFE_INTEGER)
+		const netQueue = new OQ<Uint8Array | undefined>(this.config.queueSize!.encrypt)
 
 		u._encryptQueue = encryptQueue
 		u._netQueue = netQueue
@@ -267,8 +265,8 @@ export class Upload extends EventTarget implements IUploadEvents {
 
 		const partCollector = new Uint8ArrayChunkStream(
 			partSize,
-			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize.encrypt * partSize + 1 }),
-			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize.encrypt * partSize + 1 }),
+			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize!.encrypt! * partSize + 1 }),
+			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize!.encrypt! * partSize + 1 }),
 		)
 
 		u._output = new TransformStream<Uint8Array, Uint8Array>(
@@ -277,7 +275,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 					controller.enqueue(chunk)
 				},
 			},
-			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize.encrypt * partSize + 1 }),
+			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize!.encrypt! * partSize + 1 }),
 		)
 
 		u._output.readable.pipeThrough(partCollector).pipeTo(
@@ -345,7 +343,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 										},
 									})
 
-									return await u.config.network.POST(u.config.storageNode + "/api/v1/upload", {}, fd)
+									return await u.config.net.POST(u.config.storageNode + "/api/v1/upload", {}, fd)
 								},
 								{
 									firstTimer: 500,
@@ -401,7 +399,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 						},
 					})
 
-					const res = (await u.config.network
+					const res = (await u.config.net
 						.POST(u.config.storageNode + "/api/v1/upload-status", {}, JSON.stringify(data))
 						.catch(u._reject)) as void
 
