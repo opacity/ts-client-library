@@ -209,7 +209,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 
 		const metadata = metadataRes.data
 		// old uploads will not have this defined
-		metadata.dateModified = metadata.dateModified || Date.now()
+		metadata.lastModified = metadata.lastModified || Date.now()
 		d._metadata = metadata
 		this.dispatchEvent(new DownloadMetadataEvent({ metadata }))
 

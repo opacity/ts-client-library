@@ -24,7 +24,7 @@ export type FoldersIndex = { folders: FoldersIndexEntry[] }
 
 export type FileCreationMetadata = {
 	size: number
-	dateModified: number
+	lastModified: number
 	type: string
 }
 
@@ -180,7 +180,7 @@ export class AccountSystem {
 			doc.handle = handle
 			doc.name = filename
 			doc.path = path
-			doc.modified = meta.dateModified
+			doc.modified = meta.lastModified
 			doc.size = meta.size
 			doc.type = meta.type
 			doc.uploaded = Date.now()
