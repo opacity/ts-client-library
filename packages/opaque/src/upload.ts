@@ -1,11 +1,11 @@
 import { TransformStream, WritableStream } from "web-streams-polyfill/ponyfill"
 
-import { blockSize, blockSizeOnFS, numberOfBlocks, sizeOnFS } from "../../util/src/blocks"
-import { bytesToHex } from "../../util/src/hex"
+import { blockSize, blockSizeOnFS, numberOfBlocks, sizeOnFS } from "@opacity/util/src/blocks"
+import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "../../middleware/src/middleware"
-import { extractPromise } from "../../util/src/promise"
+import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "./filemeta"
-import { getPayload, getPayloadFD } from "../../util/src/payload"
+import { getPayload, getPayloadFD } from "@opacity/util/src/payload"
 import {
 	IUploadEvents,
 	UploadBlockStartedEvent,
@@ -17,10 +17,10 @@ import {
 	UploadProgressEvent,
 	UploadStartedEvent,
 } from "./events"
-import { numberOfPartsOnFS, partSize } from "../../util/src/parts"
-import { OQ } from "../../util/src/oqueue"
-import { Retry } from "../../util/src/retry"
-import { Uint8ArrayChunkStream } from "../../util/src/streams"
+import { numberOfPartsOnFS, partSize } from "@opacity/util/src/parts"
+import { OQ } from "@opacity/util/src/oqueue"
+import { Retry } from "@opacity/util/src/retry"
+import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 
 export type UploadConfig = {
 	storageNode: string

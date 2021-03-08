@@ -1,12 +1,12 @@
 import Automerge from "automerge/src/automerge"
 import jssha from "jssha/src/sha256"
 
-import { b64ToBytes, bytesToB64 } from "../../util/src/b64"
-import { cleanPath } from "../../util/src/path"
+import { b64ToBytes, bytesToB64 } from "@opacity/util/src/b64"
+import { cleanPath } from "@opacity/util/src/path"
 import { CryptoMiddleware, NetworkMiddleware } from "../../middleware/src/middleware"
 import { DAG, DAGVertex } from "./dag"
-import { getPayload } from "../../util/src/payload"
-import { readUInt32BE, uint32ToUint8BE } from "../../util/src/uint"
+import { getPayload } from "@opacity/util/src/payload"
+import { readUInt32BE, uint32ToUint8BE } from "@opacity/util/src/uint"
 
 const sha256 = (d: Uint8Array): Uint8Array => {
 	const digest = new jssha("SHA-256", "UINT8ARRAY")

@@ -1,9 +1,9 @@
 import { posix } from "path-browserify"
 import Automerge from "automerge/src/automerge"
 
-import { arraysEqual } from "../../util/src/arrayEquality"
-import { bytesToB64 } from "../../util/src/b64"
-import { cleanPath, isPathChild } from "../../util/src/path"
+import { arraysEqual } from "@opacity/util/src/arrayEquality"
+import { bytesToB64 } from "@opacity/util/src/b64"
+import { cleanPath, isPathChild } from "@opacity/util/src/path"
 import { MetadataAccess } from "./MetadataAccess"
 
 export type FilesIndexEntry = {

@@ -1,8 +1,8 @@
 import { ReadableStream, WritableStream, TransformStream } from "web-streams-polyfill/ponyfill"
 
-import { blockSizeOnFS, numberOfBlocks, numberOfBlocksOnFS, sizeOnFS } from "../../util/src/blocks"
-import { blocksPerPart, numberOfPartsOnFS, partSizeOnFS } from "../../util/src/parts"
-import { bytesToHex } from "../../util/src/hex"
+import { blockSizeOnFS, numberOfBlocks, numberOfBlocksOnFS, sizeOnFS } from "@opacity/util/src/blocks"
+import { blocksPerPart, numberOfPartsOnFS, partSizeOnFS } from "@opacity/util/src/parts"
+import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "../../middleware/src/middleware"
 import {
 	DownloadBlockStartedEvent,
@@ -15,12 +15,12 @@ import {
 	DownloadStartedEvent,
 	IDownloadEvents,
 } from "./events"
-import { extractPromise } from "../../util/src/promise"
+import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "./filemeta"
-import { OQ } from "../../util/src/oqueue"
-import { polyfillReadableStream } from "../../util/src/streams"
-import { serializeEncrypted } from "../../util/src/serializeEncrypted"
-import { Uint8ArrayChunkStream } from "../../util/src/streams"
+import { OQ } from "@opacity/util/src/oqueue"
+import { polyfillReadableStream } from "@opacity/util/src/streams"
+import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
+import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 
 export type DownloadConfig = {
 	storageNode: string

@@ -1,5 +1,5 @@
 import { FileMeta } from "./filemeta"
-import { EventListenerOrEventListenerObject } from "../../util/src/events"
+import { EventListenerOrEventListenerObject } from "@opacity/util/src/events"
 
 export enum DownloadEvents {
 	METADATA = "metadata",

@@ -1,4 +1,4 @@
-import { readUInt32BE, uint32ToUint8BE } from "../../util/src/uint"
+import { readUInt32BE, uint32ToUint8BE } from "@opacity/util/src/uint"
 
 export class CyclicReferenceError extends Error {
 	constructor (id: number, stack: number[]) {

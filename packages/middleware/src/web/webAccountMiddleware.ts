@@ -1,7 +1,7 @@
 import HDKey from "hdkey/lib/hdkey"
 
 import { CryptoMiddleware } from "../middleware"
-import { hashToPath, pathHash } from "../../../util/src/derive"
+import { hashToPath, pathHash } from "@opacity/util/src/derive"
 
 export type WebAccountMiddlewareArgs = {
 	asymmetricKey?: Uint8Array
