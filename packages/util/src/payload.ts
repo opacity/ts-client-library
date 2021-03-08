@@ -23,7 +23,7 @@ export const getPayload = async <P extends { [key: string]: any }>({
 	key,
 	payloadKey = "requestBody",
 }: PayloadArgs<P>) => {
-	// rawPayload.timestamp = Date.now();
+	Object.assign(rawPayload, { timestamp: Date.now() });
 
 	const payload = JSON.stringify(rawPayload)
 	const hash = new Uint8Array(keccak256.arrayBuffer(payload))
