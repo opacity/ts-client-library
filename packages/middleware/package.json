@@ -1,6 +1,6 @@
 {
 	"name": "@opacity/middleware",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "> TODO: description",
 	"author": "Connor <13987924+CKH4@users.noreply.github.com>",
 	"homepage": "https://github.com/opacity/ts-client-library#readme",
@@ -23,7 +23,7 @@
 		"test": "echo \"Error: run tests from root\" && exit 1"
 	},
 	"dependencies": {
-		"@opacity/util": "^0.0.1",
+		"@opacity/util": "^0.0.2",
 		"buffer": "^6.0.3",
 		"hdkey": "https://github.com/cryptocoinjs/hdkey#browserFriendly",
 		"tslib": "^2.1.0",
