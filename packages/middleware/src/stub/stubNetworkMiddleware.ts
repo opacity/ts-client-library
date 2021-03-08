@@ -24,7 +24,7 @@ const fetchAdapter = async <T = Uint8Array>(
 	}
 }
 
-export class WackNetworkMiddleware implements NetworkMiddleware {
+export class StubNetworkMiddleware implements NetworkMiddleware {
 	async GET<T> (
 		address: string,
 		headers: HeadersInit,
