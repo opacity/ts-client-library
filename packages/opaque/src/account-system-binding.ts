@@ -1,4 +1,4 @@
-import { AccountSystem } from "../../account-system/src/AccountSystem"
+import { AccountSystem } from "@opacity/account-system/src/AccountSystem"
 
 import { Download } from "./download"
 import { Upload } from "./upload"

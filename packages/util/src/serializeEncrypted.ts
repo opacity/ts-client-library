@@ -1,4 +1,4 @@
-import { CryptoMiddleware } from "../../../../middleware/src/middleware"
+import { CryptoMiddleware } from "@opacity/middleware/src/middleware"
 
 export const serializeEncrypted = async <T>(
 	crypto: CryptoMiddleware,

@@ -23,9 +23,9 @@
 		"test": "echo \"Error: run tests from root\" && exit 1"
 	},
 	"dependencies": {
-		"@opacity/util": "^0.0.5",
 		"buffer": "^6.0.3",
 		"hdkey": "https://github.com/cryptocoinjs/hdkey#browserFriendly",
+		"js-sha3": "^0.8.0",
 		"tslib": "^2.1.0",
 		"util": "^0.12.3"
 	}

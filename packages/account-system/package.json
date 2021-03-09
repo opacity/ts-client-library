@@ -24,6 +24,7 @@
 		"test": "echo \"Error: run tests from root\" && exit 1"
 	},
 	"dependencies": {
+		"@opacity/middleware": "^0.0.5",
 		"@opacity/util": "^0.0.5",
 		"automerge": "git+https://github.com/automerge/automerge.git#performance",
 		"buffer": "^6.0.3",

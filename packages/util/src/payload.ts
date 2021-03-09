@@ -1,6 +1,6 @@
 import { keccak256 } from "js-sha3"
 
-import { CryptoMiddleware } from "../../../../middleware/src/middleware"
+import { CryptoMiddleware } from "@opacity/middleware/src/middleware"
 import { bytesToHex } from "./hex"
 
 export type PayloadArgs<P extends { [key: string]: any } = { [key: string]: any }> = {
