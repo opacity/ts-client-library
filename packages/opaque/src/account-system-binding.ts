@@ -5,12 +5,18 @@ import { Upload } from "./upload"
 import { UploadEvents, UploadMetadataEvent } from "./events"
 
 export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Upload) => {
+	let waitForAddUploadFinish: Promise<void>
+
 	u.addEventListener(UploadEvents.METADATA, ((e: UploadMetadataEvent) => {
-		accountSystem.addUpload(u._location!, u._key!, u._path, u._name, e.detail.metadata)
+		waitForAddUploadFinish = accountSystem.addUpload(u._location!, u._key!, u._path, u._name, e.detail.metadata)
 	}) as EventListener)
 
-	u.addEventListener(UploadEvents.FINISH, () => {
-		accountSystem.finishUpload(u._location!)
+	u.addEventListener(UploadEvents.FINISH, async () => {
+		const location = u._location!
+
+		await waitForAddUploadFinish
+
+		accountSystem.finishUpload(location)
 	})
 }
 
