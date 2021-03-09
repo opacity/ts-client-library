@@ -189,7 +189,7 @@ export class AccountSystem {
 
 	async finishUpload (location: Uint8Array) {
 		this.metadata.change<FilesIndex>(this.indexes.files, `Mark upload "${bytesToB64(location)}" finished`, (doc) => {
-			const f = doc.files.find((file) => arraysEqual(file.location, location))
+			const f = doc.files.find((file) => arraysEqual(Object.values(file.location), location))
 
 			if (!f) {
 				// missing upload

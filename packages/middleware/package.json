@@ -25,6 +25,7 @@
 	"dependencies": {
 		"buffer": "^6.0.3",
 		"hdkey": "https://github.com/cryptocoinjs/hdkey#browserFriendly",
+		"path-browserify": "^1.0.1",
 		"js-sha3": "^0.8.0",
 		"tslib": "^2.1.0",
 		"util": "^0.12.3"
