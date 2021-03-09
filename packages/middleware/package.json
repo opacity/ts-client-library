@@ -1,6 +1,6 @@
 {
 	"name": "@opacity/middleware",
-	"version": "0.0.6",
+	"version": "0.0.7",
 	"description": "> TODO: description",
 	"author": "Connor <13987924+CKH4@users.noreply.github.com>",
 	"homepage": "https://github.com/opacity/ts-client-library#readme",
@@ -25,8 +25,8 @@
 	"dependencies": {
 		"buffer": "^6.0.3",
 		"hdkey": "https://github.com/cryptocoinjs/hdkey#browserFriendly",
-		"path-browserify": "^1.0.1",
 		"js-sha3": "^0.8.0",
+		"path-browserify": "^1.0.1",
 		"tslib": "^2.1.0",
 		"util": "^0.12.3"
 	}
