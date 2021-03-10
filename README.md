@@ -2,7 +2,7 @@
 
 ## Packages
 
-[`@opacity/account-system`](./packages/account-management) - Account creation and payment
+[`@opacity/account-management`](./packages/account-management) - Account creation, payment, and info
 
 [`@opacity/account-system`](./packages/account-system) - Metadata
 
