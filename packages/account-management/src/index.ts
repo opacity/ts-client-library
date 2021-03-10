@@ -86,7 +86,7 @@ export class Account {
 			this.config.storageNode + "/api/v1/account-data",
 			undefined,
 			JSON.stringify(payload),
-			(body) => new Response(body).json()
+			(body) => new Response(body).json(),
 		)
 
 		return res.data
@@ -110,14 +110,14 @@ export class Account {
 			crypto: this.config.crypto,
 			payload: {
 				durationInMonths: duration,
-				storageLimit: size
-			}
+				storageLimit: size,
+			},
 		})
 		const res = await this.config.net.POST<AccountCreationRes>(
 			this.config.storageNode + "/api/v1/accounts",
 			undefined,
 			JSON.stringify(payload),
-			(body) => new Response(body).json()
+			(body) => new Response(body).json(),
 		)
 
 		return res.data.invoice

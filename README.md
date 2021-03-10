@@ -19,6 +19,7 @@
 ## Example
 
 Install
+
 ```sh
 git submodule add -b dev https://github.com/opacity/ts-client-library.git
 cd ts-client-library
@@ -27,6 +28,7 @@ cd ..
 ```
 
 src/index.ts
+
 ```ts
 import { Upload, bindUploadToAccountSystem } from "../ts-client-library/packages/opaque"
 import { AccountSystem, MetadataAccess } from "../ts-client-library/packages/account-system"
@@ -36,7 +38,9 @@ import { polyfillReadableStream } from "../ts-client-library/packages/util/src/s
 
 const storageNode = "https://broker-1.opacitynodes.com:3000"
 
-const accountHandle = hexToBytes("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
+const accountHandle = hexToBytes(
+	"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+)
 
 const netMiddleware = new WebNetworkMiddleware()
 const cryptoMiddleware = new WebAccountMiddleware({ asymmetricKey: accountHandle })
@@ -44,7 +48,7 @@ const cryptoMiddleware = new WebAccountMiddleware({ asymmetricKey: accountHandle
 const metadataAccess = new MetadataAccess({
 	net: netMiddleware,
 	crypto: cryptoMiddleware,
-	metadataNode: storageNode
+	metadataNode: storageNode,
 })
 const accountSystem = new AccountSystem({ metadataAccess })
 

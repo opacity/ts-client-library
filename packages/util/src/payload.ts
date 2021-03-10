@@ -23,7 +23,7 @@ export const getPayload = async <P extends { [key: string]: any }>({
 	key,
 	payloadKey = "requestBody",
 }: PayloadArgs<P>) => {
-	Object.assign(rawPayload, { timestamp: Math.floor(Date.now() / 1000) });
+	Object.assign(rawPayload, { timestamp: Math.floor(Date.now() / 1000) })
 
 	const payload = JSON.stringify(rawPayload)
 	const hash = new Uint8Array(keccak256.arrayBuffer(payload))
@@ -58,7 +58,7 @@ export const getPayloadFD = async <P extends { [key: string]: any }, EP extends 
 	key,
 	payloadKey = "requestBody",
 }: PayloadFDArgs<P, EP>) => {
-	Object.assign(rawPayload, { timestamp: Math.floor(Date.now() / 1000) });
+	Object.assign(rawPayload, { timestamp: Math.floor(Date.now() / 1000) })
 
 	const payload = JSON.stringify(rawPayload)
 	const hash = new Uint8Array(keccak256.arrayBuffer(payload))
