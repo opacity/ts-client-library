@@ -97,7 +97,7 @@ export class Account {
 		return info.paymentStatus
 	}
 
-	async signUp ({ size = 128, duration = 12 }: AccountSignupArgs): Promise<AccountCreationInvoice> {
+	async signUp ({ size = 128, duration = 12 }: AccountSignupArgs = {}): Promise<AccountCreationInvoice> {
 		try {
 			const info = await this.info()
 

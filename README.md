@@ -30,20 +30,28 @@ cd ..
 src/index.ts
 
 ```ts
-import { Upload, bindUploadToAccountSystem } from "../ts-client-library/packages/opaque"
+import { Account } from "../ts-client-library/packages/account-management"
 import { AccountSystem, MetadataAccess } from "../ts-client-library/packages/account-system"
-import { WebAccountMiddleware, WebNetworkMiddleware } from "../ts-client-library/packages/middleware-web"
-import { hexToBytes } from "../ts-client-library/packages/util/src/hex"
+import { createMnemonic, mnemonicToHandle } from "../ts-client-library/packages/util/src/mnemonic"
 import { polyfillReadableStream } from "../ts-client-library/packages/util/src/streams"
+import { Upload, bindUploadToAccountSystem } from "../ts-client-library/packages/opaque"
+import { WebAccountMiddleware, WebNetworkMiddleware } from "../ts-client-library/packages/middleware-web"
 
 const storageNode = "https://broker-1.opacitynodes.com:3000"
 
-const accountHandle = hexToBytes(
-	"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-)
+const mnemonic = await createMnemonic()
+const handle = await mnemonicToHandle(mnemonic)
 
+const cryptoMiddleware = new WebAccountMiddleware({ asymmetricKey: handle })
 const netMiddleware = new WebNetworkMiddleware()
-const cryptoMiddleware = new WebAccountMiddleware({ asymmetricKey: accountHandle })
+
+const account = new Account({ crypto: cryptoMiddleware, net: netMiddleware, storageNode })
+
+const invoice = await account.signUp({ size: 10 })
+console.log(invoice)
+await account.waitForPayment()
+
+console.log(await account.info())
 
 const metadataAccess = new MetadataAccess({
 	net: netMiddleware,
@@ -67,17 +75,15 @@ const upload = new Upload({
 // side effects
 bindUploadToAccountSystem(accountSystem, upload)
 
-upload.start().then((output) => {
-	if (output) {
-		polyfillReadableStream<Uint8Array>(file.stream()).pipeThrough(output)
-	}
-})
+const stream = await upload.start()
+// if there is no error
+if (stream) {
+	polyfillReadableStream<Uint8Array>(file.stream()).pipeThrough(stream)
+}
 
-upload.finish().then(() => {
-	console.log("finish")
+await upload.finish()
+console.log("finish")
 
-	accountSystem.getFilesInFolder("/").then((files) => {
-		console.log(files)
-	})
-})
+console.log(await accountSystem.getFilesInFolder("/"))
+
 ```
