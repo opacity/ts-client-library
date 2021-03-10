@@ -1,4 +1,4 @@
-import { NetworkMiddleware, NetworkMiddlewareMapReturn, NetworkMiddlewareResponse } from "../middleware"
+import { NetworkMiddleware, NetworkMiddlewareMapReturn, NetworkMiddlewareResponse } from "@opacity/middleware"
 
 const fetchAdapter = async <T = Uint8Array>(
 	method: string,

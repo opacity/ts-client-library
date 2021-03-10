@@ -2,7 +2,7 @@ import { TransformStream, WritableStream } from "web-streams-polyfill/ponyfill"
 
 import { blockSize, blockSizeOnFS, numberOfBlocks, sizeOnFS } from "@opacity/util/src/blocks"
 import { bytesToHex } from "@opacity/util/src/hex"
-import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware/src/middleware"
+import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "./filemeta"
 import { getPayload, getPayloadFD } from "@opacity/util/src/payload"

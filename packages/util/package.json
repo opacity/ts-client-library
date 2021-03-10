@@ -22,8 +22,11 @@
 		"test": "echo \"Error: run tests from root\" && exit 1"
 	},
 	"dependencies": {
+		"@opacity/middleware": "0.0.8",
 		"async-mutex": "^0.2.6",
+		"bip39": "^3.0.3",
 		"buffer": "^6.0.3",
+		"hdkey": "https://github.com/cryptocoinjs/hdkey#browserFriendly",
 		"js-sha3": "^0.8.0",
 		"path-browserify": "^1.0.1",
 		"tslib": "^2.1.0",

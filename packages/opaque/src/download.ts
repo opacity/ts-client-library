@@ -3,7 +3,7 @@ import { ReadableStream, WritableStream, TransformStream } from "web-streams-pol
 import { blockSizeOnFS, numberOfBlocks, numberOfBlocksOnFS, sizeOnFS } from "@opacity/util/src/blocks"
 import { blocksPerPart, numberOfPartsOnFS, partSizeOnFS } from "@opacity/util/src/parts"
 import { bytesToHex } from "@opacity/util/src/hex"
-import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware/src/middleware"
+import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import {
 	DownloadBlockStartedEvent,
 	DownloadBlockFinishedEvent,

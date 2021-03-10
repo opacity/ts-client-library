@@ -3,7 +3,7 @@ import jssha from "jssha/src/sha256"
 
 import { b64ToBytes, bytesToB64 } from "@opacity/util/src/b64"
 import { cleanPath } from "@opacity/util/src/path"
-import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware/src/middleware"
+import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { DAG, DAGVertex } from "./dag"
 import { getPayload } from "@opacity/util/src/payload"
 import { readUInt32BE, uint32ToUint8BE } from "@opacity/util/src/uint"

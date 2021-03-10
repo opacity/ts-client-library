@@ -2,11 +2,17 @@
 
 ## Packages
 
-[`@opacity/opaque`](./packages/opaque) - Uploads and downloads
+[`@opacity/account-system`](./packages/account-management) - Account creation and payment
 
 [`@opacity/account-system`](./packages/account-system) - Metadata
 
-[`@opacity/middleware`](./packages/middleware) - Cryptography and network
+[`@opacity/middleware`](./packages/middleware) - Middleware specification
+
+[`@opacity/middleware`](./packages/middleware-stub) - Middleware stubs for testing
+
+[`@opacity/middleware`](./packages/middleware-web) - Cryptography and network for the web
+
+[`@opacity/opaque`](./packages/opaque) - Uploads and downloads
 
 [`@opacity/util`](./packages/util) - Utilities
 
@@ -24,8 +30,7 @@ src/index.ts
 ```ts
 import { Upload, bindUploadToAccountSystem } from "../ts-client-library/packages/opaque"
 import { AccountSystem, MetadataAccess } from "../ts-client-library/packages/account-system"
-import { WebAccountMiddleware } from "../ts-client-library/packages/middleware/src/web/webAccountMiddleware"
-import { WebNetworkMiddleware } from "../ts-client-library/packages/middleware/src/web/webNetworkMiddleware"
+import { WebAccountMiddleware, WebNetworkMiddleware } from "../ts-client-library/packages/middleware-web"
 import { hexToBytes } from "../ts-client-library/packages/util/src/hex"
 import { polyfillReadableStream } from "../ts-client-library/packages/util/src/streams"
 
