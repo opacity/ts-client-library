@@ -424,5 +424,6 @@ export class Upload extends EventTarget implements IUploadEvents {
 
 	async cancel () {
 		this._cancelled = true
+		this._reject()
 	}
 }

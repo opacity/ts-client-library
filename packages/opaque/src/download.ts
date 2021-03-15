@@ -418,5 +418,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 		if (this._output) {
 			this._output.cancel()
 		}
+
+		this._reject()
 	}
 }
