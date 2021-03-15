@@ -1,6 +1,6 @@
 export {
 	AccountSystem,
-	AccountSystemArgs,
+	AccountSystemConfig,
 	AccountSystemLengthError,
 	AccountSystemNotFoundError,
 	FileCreationMetadata,

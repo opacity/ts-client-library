@@ -8,7 +8,7 @@ import { MetadataAccess } from "./MetadataAccess"
 
 export type FilesIndexEntry = {
 	location: Uint8Array
-	handle: Uint8Array
+	name: string
 	finished: boolean
 	folderDerive: Uint8Array
 }
@@ -33,6 +33,7 @@ export type FileMetadata = {
 	handle: Uint8Array
 	name: string
 	path: string
+	folderDerive: Uint8Array
 	size: number
 	uploaded: number
 	modified: number
@@ -50,15 +51,21 @@ export type FolderMetadata = {
 
 export class AccountSystemLengthError extends Error {
 	constructor (item: string, min: number, max: number, recieved: number) {
-		super(`AccountSystemLengthError: Invalid length of "${item}". Expected between ${min} and ${max}. Got ${recieved}.`)
+		super(`AccountSystemLengthError: Invalid length of "${item}". Expected between ${min} and ${max}. Got ${recieved}`)
 	}
 }
 
-// export class AccountSystemAlreadyExistsError extends Error {
-// 	constructor (type: string, path: string) {
-// 		super(`AccountSystemAlreadyExistsError: ${type} "${path}" already exists`)
-// 	}
-// }
+export class AccountSystemAlreadyExistsError extends Error {
+	constructor (type: string, path: string) {
+		super(`AccountSystemAlreadyExistsError: ${type} "${path}" already exists`)
+	}
+}
+
+export class AccountSystemSanitizationError extends Error {
+	constructor (type: string, path: string, illegal: string[]) {
+		super(`AccountSystemSanitizationError: ${type} "${path}" includes illegal characters "${illegal.map(s => `"${s}"`).join(", ")}"`)
+	}
+}
 
 export class AccountSystemNotFoundError extends Error {
 	constructor (type: string, path: string) {
@@ -66,12 +73,44 @@ export class AccountSystemNotFoundError extends Error {
 	}
 }
 
-export type AccountSystemArgs = {
+const validateFilename = (name: string) => {
+	// https://serverfault.com/questions/9546/filename-length-limits-on-linux
+	if (name.length < 1 || name.length > 255) {
+		throw new AccountSystemLengthError(`filename ("${name}")`, 1, 255, name.length)
+	}
+
+	//https://stackoverflow.com/questions/457994/what-characters-should-be-restricted-from-a-unix-file-name
+	if (name.includes(posix.sep) || name.includes("\0")) {
+		throw new AccountSystemSanitizationError("file", name, [posix.sep, "\0"])
+	}
+}
+
+const validateDirectoryPath = (path: string) => {
+	if (path == "/") {
+		return
+	}
+
+	for (let dir of path.split(posix.sep)) {
+		try {
+			validateFilename(dir)
+		} catch (err) {
+			if (err instanceof AccountSystemLengthError) {
+				throw new AccountSystemLengthError(`directory ("${dir}" of "${path}")`, 1, 255, dir.length)
+			} else if (err instanceof AccountSystemSanitizationError) {
+				throw new AccountSystemSanitizationError("directory", dir, [posix.sep, "\0"])
+			} else {
+				throw err
+			}
+		}
+	}
+}
+
+export type AccountSystemConfig = {
 	metadataAccess: MetadataAccess
 }
 
 export class AccountSystem {
-	metadata: MetadataAccess
+	config: AccountSystemConfig
 
 	guid = "5b7c0640-bc3a-4fa8-b588-ca6a922c1475"
 	version = 2
@@ -86,8 +125,8 @@ export class AccountSystem {
 		// publicShare: this.prefix + "/public",
 	}
 
-	constructor ({ metadataAccess }: AccountSystemArgs) {
-		this.metadata = metadataAccess
+	constructor (config: AccountSystemConfig) {
+		this.config = config
 	}
 
 	///////////////////////////////
@@ -104,33 +143,42 @@ export class AccountSystem {
 
 	async getFilesIndex (): Promise<Automerge.Doc<FilesIndex>> {
 		const filesIndex =
-			(await this.metadata.get<FilesIndex>(this.indexes.files)) || Automerge.from<FilesIndex>({ files: [] })
+			(await this.config.metadataAccess.get<FilesIndex>(this.indexes.files)) || Automerge.from<FilesIndex>({ files: [] })
 
 		// TODO: find orphans
 
 		return filesIndex
 	}
 
-	async getFilesInFolder (path: string): Promise<Automerge.Doc<FilesIndexEntry[]>> {
+	async getFileIndexEntryByLocation (location: Uint8Array): Promise<Automerge.Doc<FilesIndexEntry>> {
 		const filesIndex = await this.getFilesIndex()
+		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.location, location))
 
-		const foldersIndex = await this.getFoldersIndex()
-		const folderEntry = foldersIndex.folders.find((f) => f.path == path)
-
-		if (!folderEntry) {
+		if (!fileEntry) {
 			// TODO: orphan?
-			throw new Error("unexpected")
+			throw new AccountSystemNotFoundError("file", bytesToB64(location))
 		}
 
-		return filesIndex.files.filter((f) =>
-			arraysEqual(Object.values(f.folderDerive), Object.values(folderEntry.location)),
+		return fileEntry
+	}
+
+	async getFilesInFolder (path: string): Promise<Automerge.Doc<FilesIndexEntry[]>> {
+		path = cleanPath(path)
+		validateDirectoryPath(path)
+
+		const filesIndex = await this.getFilesIndex()
+
+		const folderEntry = await this.getFolderIndexEntryByPath(path)
+
+		return filesIndex.files.filter((file) =>
+			arraysEqual(Object.values(file.folderDerive), Object.values(folderEntry.location)),
 		)
 	}
 
 	async getFileMetadata (location: Uint8Array): Promise<Automerge.Doc<FileMetadata>> {
 		const filePath = this.getFileDerivePath(location)
 
-		const doc = await this.metadata.get<FileMetadata>(filePath)
+		const doc = await this.config.metadataAccess.get<FileMetadata>(filePath)
 
 		if (!doc) {
 			throw new AccountSystemNotFoundError("file", filePath)
@@ -139,27 +187,18 @@ export class AccountSystem {
 		return doc
 	}
 
-	async addUpload (location: Uint8Array, key: Uint8Array, path: string, filename: string, meta: FileCreationMetadata) {
+	async addUpload (handle: Uint8Array, path: string, filename: string, meta: FileCreationMetadata): Promise<Automerge.Doc<FileMetadata>> {
 		path = cleanPath(path)
-
-		for (let dir of path.split(posix.sep)) {
-			// https://serverfault.com/questions/9546/filename-length-limits-on-linux
-			if (dir.length > 255) {
-				throw new AccountSystemLengthError(`directory ("${dir}" of "${path}")`, 1, 255, dir.length)
-			}
-		}
-
-		// https://serverfault.com/questions/9546/filename-length-limits-on-linux
-		if (filename.length > 255) {
-			throw new AccountSystemLengthError(`filename ("${filename}")`, 1, 255, filename.length)
-		}
+		validateDirectoryPath(path)
+		validateFilename(filename)
 
 		const folder = await this.addFolder(path)
+		const folderDerive = new Uint8Array(Object.values<number>(folder.location))
 
-		const handle = Uint8Array.from(Array.from(location).concat(Array.from(key)))
+		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
 		const filePath = this.getFileDerivePath(location)
 
-		await this.metadata.change<FilesIndex>(
+		await this.config.metadataAccess.change<FilesIndex>(
 			this.indexes.files,
 			`Add file "${bytesToB64(location)}" to file index`,
 			(doc) => {
@@ -167,28 +206,31 @@ export class AccountSystem {
 					doc.files = []
 				}
 				doc.files.push({
-					location: location,
-					handle: handle,
-					folderDerive: Uint8Array.from(Object.values<number>(folder.location)),
+					location,
+					name: filename,
+					folderDerive,
 					finished: false,
 				})
 			},
 		)
 
-		await this.metadata.change<FileMetadata>(filePath, `Init file metadata for "${bytesToB64(location)}"`, (doc) => {
+		const file = await this.config.metadataAccess.change<FileMetadata>(filePath, `Init file metadata for "${bytesToB64(location)}"`, (doc) => {
 			doc.location = location
 			doc.handle = handle
 			doc.name = filename
 			doc.path = path
+			doc.folderDerive = folderDerive
 			doc.modified = meta.lastModified
 			doc.size = meta.size
 			doc.type = meta.type
 			doc.uploaded = Date.now()
 		})
+
+		return file
 	}
 
-	async finishUpload (location: Uint8Array) {
-		this.metadata.change<FilesIndex>(this.indexes.files, `Mark upload "${bytesToB64(location)}" finished`, (doc) => {
+	async finishUpload (location: Uint8Array): Promise<void> {
+		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, `Mark upload "${bytesToB64(location)}" finished`, (doc) => {
 			const f = doc.files.find((file) => arraysEqual(Object.values(file.location), location))
 
 			if (!f) {
@@ -200,7 +242,62 @@ export class AccountSystem {
 		})
 	}
 
-	// async moveFile (location: Uint8Array) {}
+	async renameFile (location: Uint8Array, newName: string): Promise<Automerge.Doc<FileMetadata>> {
+		validateFilename(newName)
+
+		const fileIndexEntry = await this.getFileIndexEntryByLocation(location)
+		if (!fileIndexEntry) {
+			throw new AccountSystemNotFoundError("file", bytesToB64(location))
+		}
+
+		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, "Rename file", (doc) => {
+			const fileIndexEntry = doc.files.find((file) => arraysEqual(Object.values(file.location), location))
+			if (fileIndexEntry) {
+				fileIndexEntry.name = newName
+			}
+		})
+
+		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(new Uint8Array(Object.values<number>(fileIndexEntry.location))),
+			"Rename file",
+			(doc) => {
+				doc.name = newName
+			}
+		)
+
+		return fileMeta
+	}
+
+	async moveFile (location: Uint8Array, newPath: string): Promise<Automerge.Doc<FileMetadata>> {
+		newPath = cleanPath(newPath)
+		validateDirectoryPath(newPath)
+
+		const folder = await this.addFolder(newPath)
+		const folderDerive = new Uint8Array(Object.values<number>(folder.location))
+
+		const fileIndexEntry = await this.getFileIndexEntryByLocation(location)
+		if (!fileIndexEntry) {
+			throw new AccountSystemNotFoundError("file", bytesToB64(location))
+		}
+
+		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, "Rename file", (doc) => {
+			const fileIndexEntry = doc.files.find((file) => arraysEqual(Object.values(file.location), location))
+			if (fileIndexEntry) {
+				fileIndexEntry.folderDerive = folderDerive
+			}
+		})
+
+		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(new Uint8Array(Object.values<number>(fileIndexEntry.location))),
+			"Rename file",
+			(doc) => {
+				doc.path = newPath
+				doc.folderDerive = folderDerive
+			}
+		)
+
+		return fileMeta
+	}
 
 	// async deleteFile (location: Uint8Array) {}
 
@@ -214,7 +311,7 @@ export class AccountSystem {
 
 	async getFoldersIndex (): Promise<Automerge.Doc<FoldersIndex>> {
 		const foldersIndex =
-			(await this.metadata.get<FoldersIndex>(this.indexes.folders)) || Automerge.from<FoldersIndex>({ folders: [] })
+			(await this.config.metadataAccess.get<FoldersIndex>(this.indexes.folders)) || Automerge.from<FoldersIndex>({ folders: [] })
 
 		// TODO: find orphans
 
@@ -227,18 +324,34 @@ export class AccountSystem {
 		return foldersIndex
 	}
 
+	async getFolderIndexEntryByPath (path: string): Promise<Automerge.Doc<FoldersIndexEntry>> {
+		path = cleanPath(path)
+		validateDirectoryPath(path)
+
+		const foldersIndex = await this.getFoldersIndex()
+		const folderEntry = foldersIndex.folders.find((folder) => folder.path == path)
+
+		if (!folderEntry) {
+			// TODO: orphan?
+			throw new AccountSystemNotFoundError("folder", path)
+		}
+
+		return folderEntry
+	}
+
 	async getFoldersInFolder (path: string): Promise<Automerge.Doc<FoldersIndexEntry[]>> {
 		path = cleanPath(path)
+		validateDirectoryPath(path)
 
 		const foldersIndex = await this.getFoldersIndex()
 
-		return foldersIndex.folders.filter((f) => isPathChild(path, f.path))
+		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
 	async getFolderMetadata (location: Uint8Array): Promise<Automerge.Doc<FolderMetadata>> {
 		const folderPath = this.getFolderDerivePath(location)
 
-		const doc = await this.metadata.get<FolderMetadata>(folderPath)
+		const doc = await this.config.metadataAccess.get<FolderMetadata>(folderPath)
 
 		if (!doc) {
 			throw new AccountSystemNotFoundError("folder", folderPath)
@@ -249,26 +362,20 @@ export class AccountSystem {
 
 	async addFolder (path: string): Promise<Automerge.Doc<FolderMetadata>> {
 		path = cleanPath(path)
-
-		for (let dir of path.split(posix.sep)) {
-			// https://serverfault.com/questions/9546/filename-length-limits-on-linux
-			if (dir.length > 255) {
-				throw new AccountSystemLengthError(`dir ("${dir}" of "${path}")`, 1, 255, dir.length)
-			}
-		}
+		validateDirectoryPath(path)
 
 		let foldersIndexDoc = await this.getFoldersIndex()
 
 		const dup = foldersIndexDoc.folders.find((entry) => entry.path == path)
 
 		if (dup) {
-			return this.getFolderMetadata(Uint8Array.from(Object.values<number>(dup.location)))
+			return this.getFolderMetadata(new Uint8Array(Object.values<number>(dup.location)))
 		}
 
-		const location = crypto.getRandomValues(new Uint8Array(32))
+		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
 		const folderPath = this.getFolderDerivePath(location)
 
-		await this.metadata.change<FoldersIndex>(this.indexes.folders, "Add folder to index", (doc) => {
+		await this.config.metadataAccess.change<FoldersIndex>(this.indexes.folders, "Add folder to index", (doc) => {
 			if (!doc.folders) {
 				doc.folders = []
 			}
@@ -278,7 +385,7 @@ export class AccountSystem {
 			})
 		})
 
-		const doc = await this.metadata.change<FolderMetadata>(folderPath, "Init folder metadata", (doc) => {
+		const doc = await this.config.metadataAccess.change<FolderMetadata>(folderPath, "Init folder metadata", (doc) => {
 			doc.location = location
 			doc.name = posix.basename(path)
 			doc.path = path
@@ -290,7 +397,50 @@ export class AccountSystem {
 		return doc
 	}
 
-	// async moveFolder (oldPath: string, newPath: string) {}
+	async renameFolder (path: string, newName: string): Promise<Automerge.Doc<FolderMetadata>> {
+		path = cleanPath(path)
+		validateDirectoryPath(path)
+		validateFilename(newName)
+
+		return await this.moveFolder(path, posix.join(posix.dirname(path), newName))
+	}
+
+	async moveFolder (oldPath: string, newPath: string): Promise<Automerge.Doc<FolderMetadata>> {
+		oldPath = cleanPath(oldPath)
+		newPath = cleanPath(newPath)
+		validateDirectoryPath(oldPath)
+		validateDirectoryPath(newPath)
+
+		const op = (posix.dirname(oldPath) == posix.dirname(newPath)) ? "Rename" : "Move"
+
+		const newFolder = await this.getFolderIndexEntryByPath(newPath)
+		if (newFolder) {
+			throw new AccountSystemAlreadyExistsError("folder", newPath)
+		}
+
+		const folderIndexEntry = await this.getFolderIndexEntryByPath(oldPath)
+		if (!folderIndexEntry) {
+			throw new AccountSystemNotFoundError("folder", newPath)
+		}
+
+		await this.config.metadataAccess.change<FoldersIndex>(this.indexes.folders, `${op} folder`, (doc) => {
+			const folderIndexEntry = doc.folders.find((folder) => folder.path == oldPath)
+			if (folderIndexEntry) {
+				folderIndexEntry.path = newPath
+			}
+		})
+
+		const doc = await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(new Uint8Array(Object.values<number>(folderIndexEntry.location))),
+			`${op} folder`,
+			(doc) => {
+				doc.name = posix.basename(newPath)
+				doc.path = newPath
+			},
+		)
+
+		return doc
+	}
 
 	// async deleteFolder (path: string) {}
 
