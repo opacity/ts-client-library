@@ -63,7 +63,11 @@ export class AccountSystemAlreadyExistsError extends Error {
 
 export class AccountSystemSanitizationError extends Error {
 	constructor (type: string, path: string, illegal: string[]) {
-		super(`AccountSystemSanitizationError: ${type} "${path}" includes illegal characters "${illegal.map(s => `"${s}"`).join(", ")}"`)
+		super(
+			`AccountSystemSanitizationError: ${type} "${path}" includes illegal characters "${illegal
+				.map((s) => `"${s}"`)
+				.join(", ")}"`,
+		)
 	}
 }
 
@@ -96,9 +100,11 @@ const validateDirectoryPath = (path: string) => {
 		} catch (err) {
 			if (err instanceof AccountSystemLengthError) {
 				throw new AccountSystemLengthError(`directory ("${dir}" of "${path}")`, 1, 255, dir.length)
-			} else if (err instanceof AccountSystemSanitizationError) {
+			}
+			else if (err instanceof AccountSystemSanitizationError) {
 				throw new AccountSystemSanitizationError("directory", dir, [posix.sep, "\0"])
-			} else {
+			}
+			else {
 				throw err
 			}
 		}
@@ -143,7 +149,8 @@ export class AccountSystem {
 
 	async getFilesIndex (): Promise<Automerge.Doc<FilesIndex>> {
 		const filesIndex =
-			(await this.config.metadataAccess.get<FilesIndex>(this.indexes.files)) || Automerge.from<FilesIndex>({ files: [] })
+			(await this.config.metadataAccess.get<FilesIndex>(this.indexes.files)) ||
+			Automerge.from<FilesIndex>({ files: [] })
 
 		// TODO: find orphans
 
@@ -187,7 +194,12 @@ export class AccountSystem {
 		return doc
 	}
 
-	async addUpload (handle: Uint8Array, path: string, filename: string, meta: FileCreationMetadata): Promise<Automerge.Doc<FileMetadata>> {
+	async addUpload (
+		handle: Uint8Array,
+		path: string,
+		filename: string,
+		meta: FileCreationMetadata,
+	): Promise<Automerge.Doc<FileMetadata>> {
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 		validateFilename(filename)
@@ -214,32 +226,40 @@ export class AccountSystem {
 			},
 		)
 
-		const file = await this.config.metadataAccess.change<FileMetadata>(filePath, `Init file metadata for "${bytesToB64(location)}"`, (doc) => {
-			doc.location = location
-			doc.handle = handle
-			doc.name = filename
-			doc.path = path
-			doc.folderDerive = folderDerive
-			doc.modified = meta.lastModified
-			doc.size = meta.size
-			doc.type = meta.type
-			doc.uploaded = Date.now()
-		})
+		const file = await this.config.metadataAccess.change<FileMetadata>(
+			filePath,
+			`Init file metadata for "${bytesToB64(location)}"`,
+			(doc) => {
+				doc.location = location
+				doc.handle = handle
+				doc.name = filename
+				doc.path = path
+				doc.folderDerive = folderDerive
+				doc.modified = meta.lastModified
+				doc.size = meta.size
+				doc.type = meta.type
+				doc.uploaded = Date.now()
+			},
+		)
 
 		return file
 	}
 
 	async finishUpload (location: Uint8Array): Promise<void> {
-		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, `Mark upload "${bytesToB64(location)}" finished`, (doc) => {
-			const f = doc.files.find((file) => arraysEqual(Object.values(file.location), location))
+		await this.config.metadataAccess.change<FilesIndex>(
+			this.indexes.files,
+			`Mark upload "${bytesToB64(location)}" finished`,
+			(doc) => {
+				const f = doc.files.find((file) => arraysEqual(Object.values(file.location), location))
 
-			if (!f) {
-				// missing upload
-				throw new AccountSystemNotFoundError("file", bytesToB64(location))
-			}
+				if (!f) {
+					// missing upload
+					throw new AccountSystemNotFoundError("file", bytesToB64(location))
+				}
 
-			f.finished = true
-		})
+				f.finished = true
+			},
+		)
 	}
 
 	async renameFile (location: Uint8Array, newName: string): Promise<Automerge.Doc<FileMetadata>> {
@@ -262,7 +282,7 @@ export class AccountSystem {
 			"Rename file",
 			(doc) => {
 				doc.name = newName
-			}
+			},
 		)
 
 		return fileMeta
@@ -293,7 +313,7 @@ export class AccountSystem {
 			(doc) => {
 				doc.path = newPath
 				doc.folderDerive = folderDerive
-			}
+			},
 		)
 
 		return fileMeta
@@ -311,7 +331,8 @@ export class AccountSystem {
 
 	async getFoldersIndex (): Promise<Automerge.Doc<FoldersIndex>> {
 		const foldersIndex =
-			(await this.config.metadataAccess.get<FoldersIndex>(this.indexes.folders)) || Automerge.from<FoldersIndex>({ folders: [] })
+			(await this.config.metadataAccess.get<FoldersIndex>(this.indexes.folders)) ||
+			Automerge.from<FoldersIndex>({ folders: [] })
 
 		// TODO: find orphans
 
@@ -411,7 +432,7 @@ export class AccountSystem {
 		validateDirectoryPath(oldPath)
 		validateDirectoryPath(newPath)
 
-		const op = (posix.dirname(oldPath) == posix.dirname(newPath)) ? "Rename" : "Move"
+		const op = posix.dirname(oldPath) == posix.dirname(newPath) ? "Rename" : "Move"
 
 		const newFolder = await this.getFolderIndexEntryByPath(newPath)
 		if (newFolder) {

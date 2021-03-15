@@ -133,7 +133,8 @@ export class Account {
 
 			if (status == "paid") {
 				resolveDone()
-			} else {
+			}
+			else {
 				iTime *= 2
 				if (iTime > 10) {
 					iTime = 10
