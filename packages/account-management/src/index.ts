@@ -126,16 +126,24 @@ export class Account {
 	async waitForPayment () {
 		const [done, resolveDone] = extractPromise<void>()
 
-		const interval = setInterval(async () => {
+		let iTime = 2
+
+		const iFn = async () => {
 			const status = await this.status()
 
 			if (status == "paid") {
 				resolveDone()
+			} else {
+				iTime *= 2
+				if (iTime > 10) {
+					iTime = 10
+				}
+				setTimeout(iFn, iTime * 1000)
 			}
-		}, 10 * 1000)
+		}
+
+		setTimeout(iFn, iTime)
 
 		await done
-
-		clearInterval(interval)
 	}
 }
