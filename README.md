@@ -84,5 +84,5 @@ if (stream) {
 await upload.finish()
 console.log("finish")
 
-console.log(await accountSystem.getFilesInFolder("/"))
+console.log(await accountSystem.getFolderMetadataByPath("/"))
 ```
