@@ -2,6 +2,21 @@ import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { extractPromise } from "@opacity/util/src/promise"
 import { getPayload } from "@opacity/util/src/payload"
 
+export type AccountPlanInfo = {
+	name: string
+	cost: number
+	costInUSD: number
+	storageInGB: number
+	maxFolders: number
+	maxMetadataSizeInMB: number
+}
+
+export type AccountPlansRes = {
+	plans: {
+		[key: number]: AccountPlanInfo
+	}
+}
+
 export type AccountCreationPayload = {
 	durationInMonths: number
 	storageLimit: number
@@ -90,6 +105,21 @@ export class Account {
 		)
 
 		return res.data
+	}
+
+	async plans () {
+		const res = await this.config.net.GET(
+			this.config.storageNode + "/plans",
+			undefined,
+			undefined,
+			(body) => new Response(body).json() as Promise<AccountPlansRes>,
+		)
+
+		// TODO: add filter for custom plans
+		// filter plan by size to prevent custom plans from showing up
+		const plans: AccountPlanInfo[] = Object.values(res.data.plans).filter((plan) => plan.storageInGB <= 2048)
+
+		return plans
 	}
 
 	async status (): Promise<AccountPaymentStatus> {
