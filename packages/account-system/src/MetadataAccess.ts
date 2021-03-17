@@ -115,20 +115,39 @@ export class MetadataAccess {
 	): Promise<Automerge.Doc<T>> {
 		path = cleanPath(path)
 
+		const priv = await this.config.crypto.derive(undefined, path)
+		return await this._change<T>(priv, description, fn)
+	}
+
+	async changePublic<T = unknown> (
+		priv: Uint8Array,
+		description: string,
+		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
+		encryptKey: Uint8Array,
+	): Promise<Automerge.Doc<T>> {
+		return await this._change<T>(priv, description, fn, encryptKey)
+	}
+
+	async _change<T = unknown> (
+		priv: Uint8Array,
+		description: string,
+		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
+		encryptKey?: Uint8Array,
+	): Promise<Automerge.Doc<T>> {
+		const pub = await this.config.crypto.getPublicKey(priv)
+
 		// sync
-		const curDoc = (await this.get<T>(path)) || Automerge.init<T>()
-		const dag = this.dags[path]
+		const curDoc = (await this._get<T>(priv)) || Automerge.init<T>()
+		const dag = this.dags[bytesToB64(pub)]
 
 		// change
 		const newDoc = Automerge.change(curDoc, description, fn)
 
 		// commit
-		const priv = await this.config.crypto.derive(undefined, path)
-		const pub = await this.config.crypto.getPublicKey(priv)
 
 		const changes = Automerge.getChanges(curDoc, newDoc)
 
-		const encrypted = await this.config.crypto.encrypt(sha256(priv), packChanges(changes))
+		const encrypted = await this.config.crypto.encrypt(encryptKey || sha256(priv), packChanges(changes))
 		const v = new DAGVertex(encrypted)
 		dag.addReduced(v)
 
@@ -158,6 +177,14 @@ export class MetadataAccess {
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
+		return await this._get<T>(priv)
+	}
+
+	async getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
+		return await this._get<T>(priv, decryptKey)
+	}
+
+	async _get<T> (priv: Uint8Array, decryptKey?: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
 		const pub = await this.config.crypto.getPublicKey(priv)
 
 		const payload = await getPayload<MetadataGetPayload>({
@@ -176,15 +203,15 @@ export class MetadataAccess {
 
 		if (((res.data as unknown) as string) == "Key not found") {
 			const dag = new DAG()
-			this.dags[path] = dag
+			this.dags[bytesToB64(pub)] = dag
 
 			return undefined
 		}
 
 		const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
-		this.dags[path] = dag
+		this.dags[bytesToB64(pub)] = dag
 
-		const decrypted = await Promise.all(dag.nodes.map(({ data }) => this.config.crypto.decrypt(sha256(priv), data)))
+		const decrypted = await Promise.all(dag.nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey || sha256(priv), data)))
 		const changes = decrypted.map((data) => unpackChanges(data)).flat()
 
 		return Automerge.applyChanges(Automerge.init<T>(), changes)
@@ -194,6 +221,14 @@ export class MetadataAccess {
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
+		return await this._delete(priv)
+	}
+
+	async deletePublic (priv: Uint8Array): Promise<void> {
+		return await this._delete(priv)
+	}
+
+	async _delete (priv: Uint8Array): Promise<void> {
 		const pub = await this.config.crypto.getPublicKey(priv)
 
 		const payload = await getPayload<MetadataDeletePayload>({
@@ -209,5 +244,7 @@ export class MetadataAccess {
 			JSON.stringify(payload),
 			(res) => new Response(res).json(),
 		)
+
+		delete this.dags[bytesToB64(pub)]
 	}
 }

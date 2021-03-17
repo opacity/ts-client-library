@@ -4,23 +4,16 @@ import Automerge from "automerge/src/automerge"
 import { arraysEqual } from "@opacity/util/src/arrayEquality"
 import { bytesToB64 } from "@opacity/util/src/b64"
 import { cleanPath, isPathChild } from "@opacity/util/src/path"
+import { entropyToKey } from "@opacity/util/src/mnemonic"
 import { MetadataAccess } from "./MetadataAccess"
 
 export type FilesIndexEntry = {
 	location: Uint8Array
-	name: string
 	finished: boolean
-	folderDerive: Uint8Array
+	public: boolean
 }
 
 export type FilesIndex = { files: FilesIndexEntry[] }
-
-export type FoldersIndexEntry = {
-	location: Uint8Array
-	path: string
-}
-
-export type FoldersIndex = { folders: FoldersIndexEntry[] }
 
 export type FileCreationMetadata = {
 	size: number
@@ -38,6 +31,20 @@ export type FileMetadata = {
 	uploaded: number
 	modified: number
 	type: string
+	finished: boolean
+	public: boolean
+}
+
+export type FoldersIndexEntry = {
+	location: Uint8Array
+	path: string
+}
+
+export type FoldersIndex = { folders: FoldersIndexEntry[] }
+
+export type FolderFileEntry = {
+	location: Uint8Array
+	name: string
 }
 
 export type FolderMetadata = {
@@ -47,6 +54,44 @@ export type FolderMetadata = {
 	size: number
 	uploaded: number
 	modified: number
+	files: FolderFileEntry[]
+}
+
+export type ShareIndexEntry = {
+	locationKey: Uint8Array
+	encryptionKey: Uint8Array
+}
+
+export type ShareIndex = { shared: ShareIndexEntry[] }
+
+export type ShareFileMetadata = {
+	handle: Uint8Array
+	name: string
+	path: string
+	size: number
+	uploaded: number
+	modified: number
+	type: string
+	public: boolean
+}
+
+export type ShareFileMetadataInit = {
+	/**
+	 * Metadata location.
+	 * Used to pull in file metadata
+	 */
+	location: Uint8Array
+	/**
+	 * Path within the shared structure
+	 */
+	path: string
+}
+
+export type ShareMetadata = {
+	locationKey: Uint8Array
+	encryptionKey: Uint8Array
+	dateShared: number
+	files: ShareFileMetadata[]
 }
 
 export class AccountSystemLengthError extends Error {
@@ -111,6 +156,10 @@ const validateDirectoryPath = (path: string) => {
 	}
 }
 
+const unfreezeUint8Array = (arr: Automerge.FreezeObject<Uint8Array>) => {
+	return new Uint8Array(Object.values<number>(arr))
+}
+
 export type AccountSystemConfig = {
 	metadataAccess: MetadataAccess
 }
@@ -127,8 +176,7 @@ export class AccountSystem {
 		files: this.prefix + "/files",
 		folders: this.prefix + "/folders",
 		// tags: this.prefix + "/tags",
-		// share: this.prefix + "/share",
-		// publicShare: this.prefix + "/public",
+		share: this.prefix + "/share",
 	}
 
 	constructor (config: AccountSystemConfig) {
@@ -169,19 +217,6 @@ export class AccountSystem {
 		return fileEntry
 	}
 
-	async getFilesInFolder (path: string): Promise<Automerge.Doc<FilesIndexEntry[]>> {
-		path = cleanPath(path)
-		validateDirectoryPath(path)
-
-		const filesIndex = await this.getFilesIndex()
-
-		const folderEntry = await this.getFolderIndexEntryByPath(path)
-
-		return filesIndex.files.filter((file) =>
-			arraysEqual(Object.values(file.folderDerive), Object.values(folderEntry.location)),
-		)
-	}
-
 	async getFileMetadata (location: Uint8Array): Promise<Automerge.Doc<FileMetadata>> {
 		const filePath = this.getFileDerivePath(location)
 
@@ -199,13 +234,14 @@ export class AccountSystem {
 		path: string,
 		filename: string,
 		meta: FileCreationMetadata,
+		pub: boolean,
 	): Promise<Automerge.Doc<FileMetadata>> {
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 		validateFilename(filename)
 
 		const folder = await this.addFolder(path)
-		const folderDerive = new Uint8Array(Object.values<number>(folder.location))
+		const folderDerive = unfreezeUint8Array(folder.location)
 
 		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
 		const filePath = this.getFileDerivePath(location)
@@ -219,9 +255,22 @@ export class AccountSystem {
 				}
 				doc.files.push({
 					location,
-					name: filename,
-					folderDerive,
 					finished: false,
+					public: pub,
+				})
+			},
+		)
+
+		await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(folderDerive),
+			`Add file "${bytesToB64(location)}" to folder`,
+			(doc) => {
+				if (!doc.files) {
+					doc.files = []
+				}
+				doc.files.push({
+					name: filename,
+					location: location,
 				})
 			},
 		)
@@ -239,6 +288,8 @@ export class AccountSystem {
 				doc.size = meta.size
 				doc.type = meta.type
 				doc.uploaded = Date.now()
+				doc.finished = false
+				doc.public = pub
 			},
 		)
 
@@ -246,18 +297,28 @@ export class AccountSystem {
 	}
 
 	async finishUpload (location: Uint8Array): Promise<void> {
+		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(location),
+			`Mark upload finished`,
+			(doc) => {
+				doc.finished = true
+			},
+		)
+
 		await this.config.metadataAccess.change<FilesIndex>(
 			this.indexes.files,
-			`Mark upload "${bytesToB64(location)}" finished`,
+			`Mark upload ${bytesToB64(location)} finished`,
 			(doc) => {
-				const f = doc.files.find((file) => arraysEqual(Object.values(file.location), location))
+				const fileEntry = doc.files.find((file) => arraysEqual(location, file.location))
 
-				if (!f) {
-					// missing upload
-					throw new AccountSystemNotFoundError("file", bytesToB64(location))
+				if (!fileEntry) {
+					throw new AccountSystemNotFoundError(
+						"file entry",
+						`"${bytesToB64(location)}" in "${bytesToB64(unfreezeUint8Array(fileMeta.folderDerive))}"`,
+					)
 				}
 
-				f.finished = true
+				fileEntry.finished = true
 			},
 		)
 	}
@@ -270,18 +331,28 @@ export class AccountSystem {
 			throw new AccountSystemNotFoundError("file", bytesToB64(location))
 		}
 
-		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, "Rename file", (doc) => {
-			const fileIndexEntry = doc.files.find((file) => arraysEqual(Object.values(file.location), location))
-			if (fileIndexEntry) {
-				fileIndexEntry.name = newName
-			}
-		})
-
 		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
-			this.getFileDerivePath(new Uint8Array(Object.values<number>(fileIndexEntry.location))),
+			this.getFileDerivePath(unfreezeUint8Array(fileIndexEntry.location)),
 			"Rename file",
 			(doc) => {
 				doc.name = newName
+			},
+		)
+
+		await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
+			`Rename file ${bytesToB64(location)}`,
+			(doc) => {
+				const fileEntry = doc.files.find((file) => arraysEqual(location, file.location))
+
+				if (!fileEntry) {
+					throw new AccountSystemNotFoundError(
+						"file entry",
+						`"${bytesToB64(location)}" in "${bytesToB64(unfreezeUint8Array(fileMeta.folderDerive))}"`,
+					)
+				}
+
+				fileEntry.name = newName
 			},
 		)
 
@@ -293,22 +364,29 @@ export class AccountSystem {
 		validateDirectoryPath(newPath)
 
 		const folder = await this.addFolder(newPath)
-		const folderDerive = new Uint8Array(Object.values<number>(folder.location))
+		const folderDerive = unfreezeUint8Array(folder.location)
 
-		const fileIndexEntry = await this.getFileIndexEntryByLocation(location)
-		if (!fileIndexEntry) {
-			throw new AccountSystemNotFoundError("file", bytesToB64(location))
-		}
+		const oldFileMeta = await this.getFileMetadata(location)
 
-		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, "Rename file", (doc) => {
-			const fileIndexEntry = doc.files.find((file) => arraysEqual(Object.values(file.location), location))
-			if (fileIndexEntry) {
-				fileIndexEntry.folderDerive = folderDerive
-			}
-		})
+		await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(unfreezeUint8Array(oldFileMeta.folderDerive)),
+			`Rename file ${bytesToB64(location)}`,
+			(doc) => {
+				const fileEntryIndex = doc.files.findIndex((file) => arraysEqual(location, file.location))
 
-		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
-			this.getFileDerivePath(new Uint8Array(Object.values<number>(fileIndexEntry.location))),
+				if (fileEntryIndex == -1) {
+					throw new AccountSystemNotFoundError(
+						"file entry",
+						`"${bytesToB64(location)}" in "${bytesToB64(unfreezeUint8Array(oldFileMeta.folderDerive))}"`,
+					)
+				}
+
+				doc.files.splice(fileEntryIndex, 1)
+			},
+		)
+
+		const newFileMeta = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(unfreezeUint8Array(location)),
 			"Rename file",
 			(doc) => {
 				doc.path = newPath
@@ -316,7 +394,7 @@ export class AccountSystem {
 			},
 		)
 
-		return fileMeta
+		return newFileMeta
 	}
 
 	// async deleteFile (location: Uint8Array) {}
@@ -360,7 +438,7 @@ export class AccountSystem {
 		return folderEntry
 	}
 
-	async getFoldersInFolder (path: string): Promise<Automerge.Doc<FoldersIndexEntry[]>> {
+	async getFoldersInFolderByPath (path: string): Promise<Automerge.Doc<FoldersIndexEntry[]>> {
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
@@ -369,7 +447,19 @@ export class AccountSystem {
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
-	async getFolderMetadata (location: Uint8Array): Promise<Automerge.Doc<FolderMetadata>> {
+	async getFolderMetadataByPath (location: Uint8Array): Promise<Automerge.Doc<FolderMetadata>> {
+		const folderPath = this.getFolderDerivePath(location)
+
+		const doc = await this.config.metadataAccess.get<FolderMetadata>(folderPath)
+
+		if (!doc) {
+			throw new AccountSystemNotFoundError("folder", folderPath)
+		}
+
+		return doc
+	}
+
+	async getFolderMetadataByLocation (location: Uint8Array): Promise<Automerge.Doc<FolderMetadata>> {
 		const folderPath = this.getFolderDerivePath(location)
 
 		const doc = await this.config.metadataAccess.get<FolderMetadata>(folderPath)
@@ -390,7 +480,7 @@ export class AccountSystem {
 		const dup = foldersIndexDoc.folders.find((entry) => entry.path == path)
 
 		if (dup) {
-			return this.getFolderMetadata(new Uint8Array(Object.values<number>(dup.location)))
+			return this.getFolderMetadataByLocation(unfreezeUint8Array(dup.location))
 		}
 
 		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
@@ -452,7 +542,7 @@ export class AccountSystem {
 		})
 
 		const doc = await this.config.metadataAccess.change<FolderMetadata>(
-			this.getFolderDerivePath(new Uint8Array(Object.values<number>(folderIndexEntry.location))),
+			this.getFolderDerivePath(unfreezeUint8Array(folderIndexEntry.location)),
 			`${op} folder`,
 			(doc) => {
 				doc.name = posix.basename(newPath)
@@ -473,7 +563,76 @@ export class AccountSystem {
 	//////////// Share ////////////
 	///////////////////////////////
 
-	///////////////////////////////
-	/////////// Public  ///////////
-	///////////////////////////////
+	getShareHandle (meta: ShareMetadata): Uint8Array {
+		return new Uint8Array(
+			Array.from(unfreezeUint8Array(meta.locationKey))
+				.concat(Array.from(unfreezeUint8Array(meta.encryptionKey)))
+		)
+	}
+
+	async share (filesInit: ShareFileMetadataInit[]): Promise<Automerge.Doc<ShareMetadata>> {
+		const files = await Promise.all(filesInit.map(async (fileInit): Promise<ShareFileMetadata> => {
+			const meta = await this.getFileMetadata(fileInit.location)
+
+			return {
+				handle: unfreezeUint8Array(meta.handle),
+				modified: meta.modified,
+				uploaded: meta.uploaded,
+				name: meta.name,
+				path: fileInit.path,
+				size: meta.size,
+				type: meta.type,
+				public: meta.public,
+			}
+		}))
+
+		const locationKey = await entropyToKey(
+			await this.config.metadataAccess.config.crypto.getRandomValues(32)
+		)
+		const encryptionKey = await this.config.metadataAccess.config.crypto.getRandomValues(32)
+
+		await this.config.metadataAccess.change<ShareIndex>(
+			this.indexes.share,
+			"Share files",
+			(doc) => {
+				if (!doc.shared) {
+					doc.shared = []
+				}
+				doc.shared.push({
+					locationKey,
+					encryptionKey,
+				})
+			},
+		)
+
+		const shareMeta = await this.config.metadataAccess.changePublic<ShareMetadata>(
+			locationKey,
+			"Share files",
+			(doc) => {
+				doc.locationKey = locationKey
+				doc.encryptionKey = encryptionKey
+				doc.dateShared = Date.now()
+				doc.files = files
+			},
+			encryptionKey,
+		)
+
+		return shareMeta
+	}
+
+	async getShared (handle: Uint8Array): Promise<Automerge.Doc<ShareMetadata>> {
+		const locationKey = handle.slice(0, 32)
+		const encryptionKey = handle.slice(32)
+
+		const shareMeta = await this.config.metadataAccess.getPublic<ShareMetadata>(
+			locationKey,
+			encryptionKey,
+		)
+
+		if (!shareMeta) {
+			throw new AccountSystemNotFoundError("shared", bytesToB64(handle))
+		}
+
+		return shareMeta
+	}
 }

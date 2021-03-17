@@ -19,6 +19,7 @@ export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Uploa
 			u._path,
 			u._name,
 			e.detail.metadata,
+			false,
 		)
 		resolveUploadMetadataLocation(new Uint8Array(Object.values<number>(file.location)))
 	}) as unknown) as EventListener)
