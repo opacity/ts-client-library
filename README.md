@@ -85,4 +85,20 @@ await upload.finish()
 console.log("finish")
 
 console.log(await accountSystem.getFolderMetadataByPath("/"))
+
+const filesIndex = await accountSystem.getFilesIndex()
+console.log(filesIndex)
+
+const fsObject = new FileSystemObject(filesIndex.files[0].handle, {
+	crypto: cryptoMiddleware,
+	net: netMiddleware,
+	storageNode,
+})
+
+bindDeleteToAccountSystem(accountSystem, fsObject)
+
+await fsObject.delete()
+
+console.log(await accountSystem.getFolderMetadataByPath("/"))
+console.log(await accountSystem.getFilesIndex())
 ```
