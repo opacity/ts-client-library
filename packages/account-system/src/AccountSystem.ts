@@ -582,6 +582,14 @@ export class AccountSystem {
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
+	async getFolderMetadataByPath (path: string): Promise<FolderMetadata> {
+		path = cleanPath(path)
+
+		const folderEntry = await this.getFolderIndexEntryByPath(path)
+
+		return await this.getFolderMetadataByLocation(folderEntry.location)
+	}
+
 	async getFolderMetadataByLocation (location: Uint8Array): Promise<FolderMetadata> {
 		const folderPath = this.getFolderDerivePath(location)
 
