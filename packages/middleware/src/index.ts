@@ -24,19 +24,13 @@ export interface NetworkMiddlewareResponse<T> {
 export type NetworkMiddlewareMapReturn<T> = (body: ReadableStream<Uint8Array> | undefined) => Promise<T>
 
 export type NetworkMiddlewareFunction<T> = {
-	(
-		address: string,
-		headers?: HeadersInit | undefined,
-		body?: T,
-		mapReturn?: undefined,
-	): Promise<NetworkMiddlewareResponse<Uint8Array>>
+	(address: string, headers?: HeadersInit | undefined, body?: T, mapReturn?: undefined): Promise<
+		NetworkMiddlewareResponse<Uint8Array>
+	>
 
-	<U> (
-		address: string,
-		headers?: HeadersInit | undefined,
-		body?: T,
-		mapReturn?: NetworkMiddlewareMapReturn<U>
-	): Promise<NetworkMiddlewareResponse<U>>
+	<U>(address: string, headers?: HeadersInit | undefined, body?: T, mapReturn?: NetworkMiddlewareMapReturn<U>): Promise<
+		NetworkMiddlewareResponse<U>
+	>
 }
 
 export interface NetworkMiddleware {

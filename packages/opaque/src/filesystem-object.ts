@@ -52,7 +52,7 @@ export class FileSystemObject extends EventTarget {
 			this.config.storageNode + "/api/v1/delete",
 			undefined,
 			JSON.stringify(payload),
-			(b) => new Response(b).text()
+			(b) => new Response(b).text(),
 		)
 
 		if (res.status != 200) {

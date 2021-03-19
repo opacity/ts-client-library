@@ -211,7 +211,9 @@ export class MetadataAccess {
 		const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
 		this.dags[bytesToB64(pub)] = dag
 
-		const decrypted = await Promise.all(dag.nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey || sha256(priv), data)))
+		const decrypted = await Promise.all(
+			dag.nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey || sha256(priv), data)),
+		)
 		const changes = decrypted.map((data) => unpackChanges(data)).flat()
 
 		return Automerge.applyChanges(Automerge.init<T>(), changes)

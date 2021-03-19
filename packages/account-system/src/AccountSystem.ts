@@ -219,7 +219,7 @@ export class AccountSystem {
 				public: !!file.public,
 				handle: unfreezeUint8Array(file.handle),
 				deleted: !!file.deleted,
-			}))
+			})),
 		}
 	}
 
@@ -484,19 +484,15 @@ export class AccountSystem {
 	}
 
 	async removeFile (location: Uint8Array) {
-		await this.config.metadataAccess.change<FilesIndex>(
-			this.indexes.files,
-			"Mark upload deleted",
-			(doc) => {
-				const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, "Mark upload deleted", (doc) => {
+			const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
-				if (!fileEntry) {
-					throw new AccountSystemNotFoundError("file entry", bytesToB64(location))
-				}
+			if (!fileEntry) {
+				throw new AccountSystemNotFoundError("file entry", bytesToB64(location))
+			}
 
-				fileEntry.deleted = true
-			},
-		)
+			fileEntry.deleted = true
+		})
 
 		const fileMeta = await this.getFileMetadata(location)
 		await this.config.metadataAccess.delete(this.getFileDerivePath(location))
@@ -537,7 +533,7 @@ export class AccountSystem {
 			folders: foldersIndex.folders.map((folder) => ({
 				location: unfreezeUint8Array(folder.location),
 				path: folder.path,
-			}))
+			})),
 		}
 	}
 
@@ -648,7 +644,7 @@ export class AccountSystem {
 				doc.size = 0
 				doc.uploaded = Date.now()
 				doc.files = []
-			}
+			},
 		)
 
 		return {
@@ -764,9 +760,7 @@ export class AccountSystem {
 	///////////////////////////////
 
 	getShareHandle (meta: ShareMetadata): Uint8Array {
-		return new Uint8Array(
-			Array.from(meta.locationKey).concat(Array.from(meta.encryptionKey))
-		)
+		return new Uint8Array(Array.from(meta.locationKey).concat(Array.from(meta.encryptionKey)))
 	}
 
 	async getShareIndex (): Promise<ShareIndex> {
@@ -780,45 +774,43 @@ export class AccountSystem {
 			shared: sharedIndex.shared.map((shareEntry) => ({
 				locationKey: unfreezeUint8Array(shareEntry.locationKey),
 				encryptionKey: unfreezeUint8Array(shareEntry.encryptionKey),
-			}))
+			})),
 		}
 	}
 
 	async share (filesInit: ShareFileMetadataInit[]): Promise<ShareMetadata> {
-		const files = await Promise.all(filesInit.map(async (fileInit): Promise<ShareFileMetadata> => {
-			const meta = await this.getFileMetadata(fileInit.location)
+		const files = await Promise.all(
+			filesInit.map(
+				async (fileInit): Promise<ShareFileMetadata> => {
+					const meta = await this.getFileMetadata(fileInit.location)
 
-			return {
-				handle: meta.handle,
-				modified: meta.modified,
-				uploaded: meta.uploaded,
-				name: meta.name,
-				path: fileInit.path,
-				size: meta.size,
-				type: meta.type,
-				finished: !!meta.finished,
-				public: !!meta.public,
-			}
-		}))
-
-		const locationKey = await entropyToKey(
-			await this.config.metadataAccess.config.crypto.getRandomValues(32)
+					return {
+						handle: meta.handle,
+						modified: meta.modified,
+						uploaded: meta.uploaded,
+						name: meta.name,
+						path: fileInit.path,
+						size: meta.size,
+						type: meta.type,
+						finished: !!meta.finished,
+						public: !!meta.public,
+					}
+				},
+			),
 		)
+
+		const locationKey = await entropyToKey(await this.config.metadataAccess.config.crypto.getRandomValues(32))
 		const encryptionKey = await this.config.metadataAccess.config.crypto.getRandomValues(32)
 
-		await this.config.metadataAccess.change<ShareIndex>(
-			this.indexes.share,
-			"Share files",
-			(doc) => {
-				if (!doc.shared) {
-					doc.shared = []
-				}
-				doc.shared.push({
-					locationKey,
-					encryptionKey,
-				})
-			},
-		)
+		await this.config.metadataAccess.change<ShareIndex>(this.indexes.share, "Share files", (doc) => {
+			if (!doc.shared) {
+				doc.shared = []
+			}
+			doc.shared.push({
+				locationKey,
+				encryptionKey,
+			})
+		})
 
 		const shareMeta = await this.config.metadataAccess.changePublic<ShareMetadata>(
 			locationKey,
@@ -854,10 +846,7 @@ export class AccountSystem {
 		const locationKey = handle.slice(0, 32)
 		const encryptionKey = handle.slice(32)
 
-		const shareMeta = await this.config.metadataAccess.getPublic<ShareMetadata>(
-			locationKey,
-			encryptionKey,
-		)
+		const shareMeta = await this.config.metadataAccess.getPublic<ShareMetadata>(locationKey, encryptionKey)
 
 		if (!shareMeta) {
 			throw new AccountSystemNotFoundError("shared", bytesToB64(handle))

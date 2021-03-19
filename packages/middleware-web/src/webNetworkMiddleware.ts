@@ -1,6 +1,11 @@
-import { NetworkMiddleware, NetworkMiddlewareFunction, NetworkMiddlewareMapReturn, NetworkMiddlewareResponse } from "@opacity/middleware"
+import {
+	NetworkMiddleware,
+	NetworkMiddlewareFunction,
+	NetworkMiddlewareMapReturn,
+	NetworkMiddlewareResponse,
+} from "@opacity/middleware"
 
-const fetchAdapter = async <T> (
+const fetchAdapter = async <T>(
 	method: string,
 	address: string,
 	headers: HeadersInit | undefined,
@@ -25,7 +30,8 @@ export class WebNetworkMiddleware implements NetworkMiddleware {
 		address: string,
 		headers?: HeadersInit,
 		body?: undefined,
-		mapReturn = async (b: ReadableStream<Uint8Array> | undefined) => new Uint8Array(await new Response(b).arrayBuffer()),
+		mapReturn = async (b: ReadableStream<Uint8Array> | undefined) =>
+			new Uint8Array(await new Response(b).arrayBuffer()),
 	) => {
 		return await fetchAdapter("GET", address, headers, body, mapReturn)
 	}
@@ -34,7 +40,8 @@ export class WebNetworkMiddleware implements NetworkMiddleware {
 		address: string,
 		headers?: HeadersInit,
 		body?: BodyInit,
-		mapReturn = async (b: ReadableStream<Uint8Array> | undefined) => new Uint8Array(await new Response(b).arrayBuffer())
+		mapReturn = async (b: ReadableStream<Uint8Array> | undefined) =>
+			new Uint8Array(await new Response(b).arrayBuffer()),
 	) {
 		return await fetchAdapter("POST", address, headers, body, mapReturn)
 	}
