@@ -3,6 +3,7 @@ import Automerge from "automerge/src/automerge"
 
 import { arraysEqual } from "@opacity/util/src/arrayEquality"
 import { bytesToB64 } from "@opacity/util/src/b64"
+import { bytesToHex } from "@opacity/util/src/hex"
 import { cleanPath, isPathChild } from "@opacity/util/src/path"
 import { entropyToKey } from "@opacity/util/src/mnemonic"
 import { MetadataAccess } from "./MetadataAccess"
@@ -11,6 +12,8 @@ export type FilesIndexEntry = {
 	location: Uint8Array
 	finished: boolean
 	public: boolean
+	handle: Uint8Array
+	deleted: boolean
 }
 
 export type FilesIndex = { files: FilesIndexEntry[] }
@@ -123,6 +126,12 @@ export class AccountSystemNotFoundError extends Error {
 	}
 }
 
+export class AccountSystemNotEmptyError extends Error {
+	constructor (type: string, path: string, action: string) {
+		super(`AccountSystemNotEmptyError: ${type} "${path}" must be empty to ${action}`)
+	}
+}
+
 const validateFilename = (name: string) => {
 	// https://serverfault.com/questions/9546/filename-length-limits-on-linux
 	if (name.length < 1 || name.length > 255) {
@@ -208,8 +217,22 @@ export class AccountSystem {
 				location: unfreezeUint8Array(file.location),
 				finished: !!file.finished,
 				public: !!file.public,
+				handle: unfreezeUint8Array(file.handle),
+				deleted: !!file.deleted,
 			}))
 		}
+	}
+
+	async getFileLocationByHandle (handle: Uint8Array): Promise<Uint8Array> {
+		const filesIndex = await this.getFilesIndex()
+
+		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.handle, handle))
+
+		if (!fileEntry) {
+			throw new AccountSystemNotFoundError("file of handle", bytesToHex(handle.slice(0, 32)) + "...")
+		}
+
+		return fileEntry.location
 	}
 
 	async getFileIndexEntryByLocation (location: Uint8Array): Promise<FilesIndexEntry> {
@@ -225,6 +248,8 @@ export class AccountSystem {
 			location: fileEntry.location,
 			finished: !!fileEntry.finished,
 			public: !!fileEntry.public,
+			handle: fileEntry.handle,
+			deleted: !!fileEntry.deleted,
 		}
 	}
 
@@ -280,6 +305,8 @@ export class AccountSystem {
 					location,
 					finished: false,
 					public: pub,
+					handle,
+					deleted: false,
 				})
 			},
 		)
@@ -334,7 +361,7 @@ export class AccountSystem {
 	async finishUpload (location: Uint8Array): Promise<void> {
 		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
 			this.getFileDerivePath(location),
-			`Mark upload finished`,
+			"Mark upload finished",
 			(doc) => {
 				doc.finished = true
 			},
@@ -456,7 +483,34 @@ export class AccountSystem {
 		}
 	}
 
-	// async deleteFile (location: Uint8Array) {}
+	async removeFile (location: Uint8Array) {
+		await this.config.metadataAccess.change<FilesIndex>(
+			this.indexes.files,
+			"Mark upload deleted",
+			(doc) => {
+				const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+
+				if (!fileEntry) {
+					throw new AccountSystemNotFoundError("file entry", bytesToB64(location))
+				}
+
+				fileEntry.deleted = true
+			},
+		)
+
+		const fileMeta = await this.getFileMetadata(location)
+		await this.config.metadataAccess.delete(this.getFileDerivePath(location))
+
+		await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(fileMeta.folderDerive),
+			`Remove file ${location}`,
+			(doc) => {
+				const fileIndex = doc.files.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+
+				doc.files.splice(fileIndex, 1)
+			},
+		)
+	}
 
 	///////////////////////////////
 	/////////// Folders ///////////
@@ -514,27 +568,18 @@ export class AccountSystem {
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
-	async getFolderMetadataByPath (location: Uint8Array): Promise<FolderMetadata> {
-		const folderPath = this.getFolderDerivePath(location)
+	async getFoldersInFolderByLocation (location: Uint8Array): Promise<FoldersIndexEntry[]> {
+		const foldersIndex = await this.getFoldersIndex()
 
-		const doc = await this.config.metadataAccess.get<FolderMetadata>(folderPath)
+		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
 
-		if (!doc) {
-			throw new AccountSystemNotFoundError("folder", folderPath)
+		if (!folderEntry) {
+			throw new AccountSystemNotFoundError("folder entry", bytesToB64(location))
 		}
 
-		return {
-			location: unfreezeUint8Array(doc.location),
-			name: doc.name,
-			path: doc.path,
-			size: doc.size,
-			uploaded: doc.uploaded,
-			modified: doc.modified,
-			files: doc.files.map((file) => ({
-				location: unfreezeUint8Array(file.location),
-				name: file.name,
-			})),
-		}
+		const path = folderEntry.path
+
+		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
 	async getFolderMetadataByLocation (location: Uint8Array): Promise<FolderMetadata> {
@@ -573,7 +618,6 @@ export class AccountSystem {
 		}
 
 		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
-		const folderPath = this.getFolderDerivePath(location)
 
 		await this.config.metadataAccess.change<FoldersIndex>(this.indexes.folders, "Add folder to index", (doc) => {
 			if (!doc.folders) {
@@ -585,14 +629,19 @@ export class AccountSystem {
 			})
 		})
 
-		const doc = await this.config.metadataAccess.change<FolderMetadata>(folderPath, "Init folder metadata", (doc) => {
-			doc.location = location
-			doc.name = posix.basename(path)
-			doc.path = path
-			doc.modified = Date.now()
-			doc.size = 0
-			doc.uploaded = Date.now()
-		})
+		const doc = await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(location),
+			"Init folder metadata",
+			(doc) => {
+				doc.location = location
+				doc.name = posix.basename(path)
+				doc.path = path
+				doc.modified = Date.now()
+				doc.size = 0
+				doc.uploaded = Date.now()
+				doc.files = []
+			}
+		)
 
 		return {
 			location: unfreezeUint8Array(doc.location),
@@ -664,7 +713,39 @@ export class AccountSystem {
 		}
 	}
 
-	// async deleteFolder (path: string) {}
+	async removeFolderByPath (path: string) {
+		path = cleanPath(path)
+
+		const folderEntry = await this.getFolderIndexEntryByPath(path)
+
+		return await this.removeFolderByLocation(folderEntry.location)
+	}
+
+	async removeFolderByLocation (location: Uint8Array) {
+		const folderMeta = await this.getFolderMetadataByLocation(location)
+
+		if (folderMeta.files.length) {
+			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
+		}
+
+		const childFolders = await this.getFoldersInFolderByLocation(location)
+
+		if (childFolders.length) {
+			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
+		}
+
+		await this.config.metadataAccess.delete(this.getFolderDerivePath(location))
+
+		await this.config.metadataAccess.change<FoldersIndex>(
+			this.indexes.folders,
+			`Remove folder ${bytesToB64(location)}`,
+			(doc) => {
+				const folderIndex = doc.folders.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+
+				doc.folders.splice(folderIndex, 1)
+			},
+		)
+	}
 
 	///////////////////////////////
 	//////////// Tags  ////////////

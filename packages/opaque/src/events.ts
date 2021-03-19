@@ -228,3 +228,28 @@ export interface IUploadEvents {
 		options?: boolean | AddEventListenerOptions | undefined,
 	): void
 }
+
+export enum FileSystemObjectEvents {
+	DELETE = "delete",
+}
+
+type FileSystemObjectDeleteEventData = {}
+export class FileSystemObjectDeleteEvent extends CustomEvent<FileSystemObjectDeleteEventData> {
+	constructor (data: FileSystemObjectDeleteEventData) {
+		super(FileSystemObjectEvents.DELETE, { detail: data })
+	}
+}
+
+export interface IFileSystemObjectEvents {
+	addEventListener(
+		type: FileSystemObjectEvents,
+		listener: EventListener | EventListenerObject | null,
+		options?: boolean | AddEventListenerOptions | undefined,
+	): void
+
+	addEventListener(
+		type: FileSystemObjectEvents.DELETE,
+		listener: EventListenerOrEventListenerObject<FileSystemObjectDeleteEvent> | null,
+		options?: boolean | AddEventListenerOptions | undefined,
+	): void
+}

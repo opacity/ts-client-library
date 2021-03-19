@@ -1,11 +1,11 @@
-import { NetworkMiddleware, NetworkMiddlewareResponse, NetworkMiddlewareMapReturn } from "@opacity/middleware"
+import { NetworkMiddleware, NetworkMiddlewareResponse, NetworkMiddlewareMapReturn, NetworkMiddlewareFunction } from "@opacity/middleware"
 
-const fetchAdapter = async <T = Uint8Array>(
+const fetchAdapter = async <T>(
 	method: string,
 	address: string,
-	headers: HeadersInit,
-	body: string | FormData | undefined,
-	mapReturn: NetworkMiddlewareMapReturn<T> = async (b) => (b as unknown) as T,
+	headers: HeadersInit | undefined,
+	body: BodyInit | undefined,
+	mapReturn: NetworkMiddlewareMapReturn<T>,
 ): Promise<NetworkMiddlewareResponse<T>> => {
 	await new Promise<void>((resolve) => {
 		setTimeout(() => {
@@ -25,16 +25,21 @@ const fetchAdapter = async <T = Uint8Array>(
 }
 
 export class StubNetworkMiddleware implements NetworkMiddleware {
-	async GET<T> (
+	GET: NetworkMiddlewareFunction<undefined> = async (
 		address: string,
-		headers: HeadersInit,
-		body: undefined,
-		mapReturn?: NetworkMiddlewareMapReturn<T>,
-	): Promise<NetworkMiddlewareResponse<T>> {
+		headers?: HeadersInit,
+		body?: undefined,
+		mapReturn = async (b: ReadableStream<Uint8Array> | undefined) => new Uint8Array(await new Response(b).arrayBuffer()),
+	) => {
 		return await fetchAdapter("GET", address, headers, body, mapReturn)
 	}
 
-	async POST<T> (address: string, headers: HeadersInit, body: string, mapReturn?: NetworkMiddlewareMapReturn<T>) {
+	async POST<T> (
+		address: string,
+		headers?: HeadersInit,
+		body?: BodyInit,
+		mapReturn = async (b: ReadableStream<Uint8Array> | undefined) => new Uint8Array(await new Response(b).arrayBuffer())
+	) {
 		return await fetchAdapter("POST", address, headers, body, mapReturn)
 	}
 }
