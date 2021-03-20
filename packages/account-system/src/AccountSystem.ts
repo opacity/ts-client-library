@@ -149,7 +149,7 @@ const validateDirectoryPath = (path: string) => {
 		return
 	}
 
-	for (let dir of path.split(posix.sep)) {
+	for (let dir of path.split(posix.sep).slice(1)) {
 		try {
 			validateFilename(dir)
 		} catch (err) {
@@ -612,6 +612,10 @@ export class AccountSystem {
 	async addFolder (path: string): Promise<FolderMetadata> {
 		path = cleanPath(path)
 		validateDirectoryPath(path)
+
+		if (path != "/") {
+			await this.addFolder(posix.dirname(path))
+		}
 
 		let foldersIndexDoc = await this.getFoldersIndex()
 
