@@ -18,7 +18,7 @@ export const cleanPath = (path: string) => {
 export const isPathChild = (parent: string, other: string) => {
 	const rel = posix.relative(parent, other)
 
-	if (rel != "" || rel[0] != "." || rel.split(posix.sep).length == 1) {
+	if (rel != "" && rel[0] != "." && rel.split(posix.sep).length == 1) {
 		return true
 	}
 
