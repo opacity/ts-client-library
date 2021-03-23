@@ -324,6 +324,7 @@ export class AccountSystem {
 				})
 
 				doc.modified = Date.now()
+				doc.size++
 			},
 		)
 
@@ -444,9 +445,25 @@ export class AccountSystem {
 
 		const oldFileMeta = await this.getFileMetadata(location)
 
+		const newFolder = await this.addFolder(newPath)
+
+		await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(newFolder.location),
+			`Move file ${bytesToB64(location)}`,
+			(doc) => {
+				doc.files.push({
+					location,
+					name: oldFileMeta.name,
+				})
+
+				doc.modified = Date.now()
+				doc.size++
+			},
+		)
+
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(oldFileMeta.folderDerive),
-			`Rename file ${bytesToB64(location)}`,
+			`Move file ${bytesToB64(location)}`,
 			(doc) => {
 				const fileEntryIndex = doc.files.findIndex((file) => arraysEqual(location, file.location))
 
@@ -458,12 +475,15 @@ export class AccountSystem {
 				}
 
 				doc.files.splice(fileEntryIndex, 1)
+
+				doc.modified = Date.now()
+				doc.size--
 			},
 		)
 
 		const newFileMeta = await this.config.metadataAccess.change<FileMetadata>(
 			this.getFileDerivePath(location),
-			"Rename file",
+			"Move file",
 			(doc) => {
 				doc.path = newPath
 				doc.folderDerive = folderDerive
