@@ -322,6 +322,8 @@ export class AccountSystem {
 					name: filename,
 					location: location,
 				})
+
+				doc.modified = Date.now()
 			},
 		)
 
@@ -681,25 +683,44 @@ export class AccountSystem {
 
 		const op = posix.dirname(oldPath) == posix.dirname(newPath) ? "Rename" : "Move"
 
-		const newFolder = await this.getFolderIndexEntryByPath(newPath)
+		const newFolder = await this.getFolderIndexEntryByPath(newPath).catch(() => {})
 		if (newFolder) {
 			throw new AccountSystemAlreadyExistsError("folder", newPath)
 		}
 
-		const folderIndexEntry = await this.getFolderIndexEntryByPath(oldPath)
-		if (!folderIndexEntry) {
-			throw new AccountSystemNotFoundError("folder", newPath)
+		const folderEntry = await this.getFolderIndexEntryByPath(oldPath)
+		if (!folderEntry) {
+			throw new AccountSystemNotFoundError("folder", oldPath)
 		}
 
+		const foldersIndex = await this.getFoldersIndex()
+
 		await this.config.metadataAccess.change<FoldersIndex>(this.indexes.folders, `${op} folder`, (doc) => {
-			const folderIndexEntry = doc.folders.find((folder) => folder.path == oldPath)
-			if (folderIndexEntry) {
-				folderIndexEntry.path = newPath
+			const subs = doc.folders.filter((folderEntry) => posix.relative(oldPath, folderEntry.path).indexOf("../") != 0)
+
+			for (let folderEntry of subs) {
+				folderEntry.path = posix.join(newPath, posix.relative(oldPath, folderEntry.path))
 			}
 		})
 
+		const subs = foldersIndex.folders.filter((folderEntry) => {
+			const rel = posix.relative(oldPath, folderEntry.path)
+
+			return rel != "" && rel.indexOf("../") != 0
+		})
+
+		for (let folderEntry of subs) {
+			await this.config.metadataAccess.change<FolderMetadata>(
+				this.getFolderDerivePath(folderEntry.location),
+				`${op} folder`,
+				(doc) => {
+					doc.path = posix.join(newPath, posix.relative(oldPath, folderEntry.path))
+				},
+			)
+		}
+
 		const doc = await this.config.metadataAccess.change<FolderMetadata>(
-			this.getFolderDerivePath(folderIndexEntry.location),
+			this.getFolderDerivePath(folderEntry.location),
 			`${op} folder`,
 			(doc) => {
 				doc.name = posix.basename(newPath)
