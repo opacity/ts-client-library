@@ -181,7 +181,29 @@ export class MetadataAccess {
 	}
 
 	async getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
-		return await this._get<T>(priv, decryptKey)
+		const pub = await this.config.crypto.getPublicKey(priv)
+
+		const res = await this.config.net.POST<MetadataGetRes>(
+			this.config.metadataNode + "/api/v2/metadata/get-public",
+			undefined,
+			JSON.stringify({
+				requestBody: {
+					metadataV2Key: bytesToB64(pub),
+					timestamp: Date.now() / 1000,
+				}
+			}),
+			(res) => new Response(res).json(),
+		)
+
+		const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
+		this.dags[bytesToB64(pub)] = dag
+
+		const decrypted = await Promise.all(
+			dag.nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey, data)),
+		)
+		const changes = decrypted.map((data) => unpackChanges(data)).flat()
+
+		return Automerge.applyChanges(Automerge.init<T>(), changes)
 	}
 
 	async _get<T> (priv: Uint8Array, decryptKey?: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
