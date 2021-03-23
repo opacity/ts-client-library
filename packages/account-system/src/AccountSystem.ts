@@ -28,7 +28,6 @@ export type FileMetadata = {
 	location: Uint8Array
 	handle: Uint8Array
 	name: string
-	path: string
 	folderDerive: Uint8Array
 	size: number
 	uploaded: number
@@ -266,7 +265,6 @@ export class AccountSystem {
 			location: unfreezeUint8Array(doc.location),
 			handle: unfreezeUint8Array(doc.handle),
 			name: doc.name,
-			path: doc.path,
 			folderDerive: unfreezeUint8Array(doc.folderDerive),
 			size: doc.size,
 			uploaded: doc.uploaded,
@@ -335,7 +333,6 @@ export class AccountSystem {
 				doc.location = location
 				doc.handle = handle
 				doc.name = filename
-				doc.path = path
 				doc.folderDerive = folderDerive
 				doc.modified = meta.lastModified
 				doc.size = meta.size
@@ -350,7 +347,6 @@ export class AccountSystem {
 			location: unfreezeUint8Array(file.location),
 			handle: unfreezeUint8Array(file.handle),
 			name: file.name,
-			path: file.path,
 			folderDerive: unfreezeUint8Array(file.folderDerive),
 			size: file.size,
 			uploaded: file.uploaded,
@@ -425,7 +421,6 @@ export class AccountSystem {
 			location: unfreezeUint8Array(fileMeta.location),
 			handle: unfreezeUint8Array(fileMeta.handle),
 			name: fileMeta.name,
-			path: fileMeta.path,
 			folderDerive: unfreezeUint8Array(fileMeta.folderDerive),
 			size: fileMeta.size,
 			uploaded: fileMeta.uploaded,
@@ -485,7 +480,6 @@ export class AccountSystem {
 			this.getFileDerivePath(location),
 			"Move file",
 			(doc) => {
-				doc.path = newPath
 				doc.folderDerive = folderDerive
 			},
 		)
@@ -494,7 +488,6 @@ export class AccountSystem {
 			location: unfreezeUint8Array(newFileMeta.location),
 			handle: unfreezeUint8Array(newFileMeta.handle),
 			name: newFileMeta.name,
-			path: newFileMeta.path,
 			folderDerive: unfreezeUint8Array(newFileMeta.folderDerive),
 			size: newFileMeta.size,
 			uploaded: newFileMeta.uploaded,
