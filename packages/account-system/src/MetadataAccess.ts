@@ -1,3 +1,4 @@
+import { Mutex } from "async-mutex"
 import Automerge from "automerge/src/automerge"
 import jssha from "jssha/src/sha256"
 
@@ -28,6 +29,7 @@ type MetadataAddPayload = {
 	metadataV2Vertex: string
 	metadataV2Edges: string[]
 	metadataV2Sig: string
+	isPublic: boolean
 }
 
 type MetadataAddRes = {
@@ -104,6 +106,8 @@ export class MetadataAccess {
 	config: MetadataAccessConfig
 	dags: { [path: string]: DAG } = {}
 
+	_m = new Mutex()
+
 	constructor (config: MetadataAccessConfig) {
 		this.config = config
 	}
@@ -113,10 +117,16 @@ export class MetadataAccess {
 		description: string,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 	): Promise<Automerge.Doc<T>> {
-		path = cleanPath(path)
+		const release = await this._m.acquire()
 
-		const priv = await this.config.crypto.derive(undefined, path)
-		return await this._change<T>(priv, description, fn)
+		try {
+			path = cleanPath(path)
+
+			const priv = await this.config.crypto.derive(undefined, path)
+			return await this._change<T>(priv, description, fn, false)
+		} finally {
+			release()
+		}
 	}
 
 	async changePublic<T = unknown> (
@@ -125,13 +135,20 @@ export class MetadataAccess {
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 		encryptKey: Uint8Array,
 	): Promise<Automerge.Doc<T>> {
-		return await this._change<T>(priv, description, fn, encryptKey)
+		const release = await this._m.acquire()
+
+		try {
+			return await this._change<T>(priv, description, fn, true, encryptKey)
+		} finally {
+			release()
+		}
 	}
 
 	async _change<T = unknown> (
 		priv: Uint8Array,
 		description: string,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
+		isPublic: boolean,
 		encryptKey?: Uint8Array,
 	): Promise<Automerge.Doc<T>> {
 		const pub = await this.config.crypto.getPublicKey(priv)
@@ -160,6 +177,7 @@ export class MetadataAccess {
 				metadataV2Vertex: bytesToB64(v.binary),
 				metadataV2Edges: edges.map((edge) => bytesToB64(edge.binary)),
 				metadataV2Sig: bytesToB64(await this.config.crypto.sign(priv, await dag.digest(v.id, sha256))),
+				isPublic,
 			},
 		})
 
@@ -174,34 +192,16 @@ export class MetadataAccess {
 	}
 
 	async get<T> (path: string): Promise<Automerge.Doc<T> | undefined> {
-		path = cleanPath(path)
+		const release = await this._m.acquire()
 
-		const priv = await this.config.crypto.derive(undefined, path)
-		return await this._get<T>(priv)
-	}
+		try {
+			path = cleanPath(path)
 
-	async getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
-		const pub = await this.config.crypto.getPublicKey(priv)
-
-		const res = await this.config.net.POST<MetadataGetRes>(
-			this.config.metadataNode + "/api/v2/metadata/get-public",
-			undefined,
-			JSON.stringify({
-				requestBody: {
-					metadataV2Key: bytesToB64(pub),
-					timestamp: Date.now() / 1000,
-				},
-			}),
-			(res) => new Response(res).json(),
-		)
-
-		const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
-		this.dags[bytesToB64(pub)] = dag
-
-		const decrypted = await Promise.all(dag.nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey, data)))
-		const changes = decrypted.map((data) => unpackChanges(data)).flat()
-
-		return Automerge.applyChanges(Automerge.init<T>(), changes)
+			const priv = await this.config.crypto.derive(undefined, path)
+			return await this._get<T>(priv)
+		} finally {
+			release()
+		}
 	}
 
 	async _get<T> (priv: Uint8Array, decryptKey?: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
@@ -239,15 +239,61 @@ export class MetadataAccess {
 		return Automerge.applyChanges(Automerge.init<T>(), changes)
 	}
 
-	async delete (path: string): Promise<void> {
-		path = cleanPath(path)
+	async getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
+		const release = await this._m.acquire()
 
-		const priv = await this.config.crypto.derive(undefined, path)
-		return await this._delete(priv)
+		try {
+			return await this._getPublic(priv, decryptKey)
+		} finally {
+			release()
+		}
+	}
+
+	async _getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
+		const pub = await this.config.crypto.getPublicKey(priv)
+
+		const res = await this.config.net.POST<MetadataGetRes>(
+			this.config.metadataNode + "/api/v2/metadata/get-public",
+			undefined,
+			JSON.stringify({
+				requestBody: {
+					metadataV2Key: bytesToB64(pub),
+					timestamp: Date.now() / 1000,
+				},
+			}),
+			(res) => new Response(res).json(),
+		)
+
+		const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
+		this.dags[bytesToB64(pub)] = dag
+
+		const decrypted = await Promise.all(dag.nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey, data)))
+		const changes = decrypted.map((data) => unpackChanges(data)).flat()
+
+		return Automerge.applyChanges(Automerge.init<T>(), changes)
+	}
+
+	async delete (path: string): Promise<void> {
+		const release = await this._m.acquire()
+
+		try {
+			path = cleanPath(path)
+
+			const priv = await this.config.crypto.derive(undefined, path)
+			return await this._delete(priv)
+		} finally {
+			release()
+		}
 	}
 
 	async deletePublic (priv: Uint8Array): Promise<void> {
-		return await this._delete(priv)
+		const release = await this._m.acquire()
+
+		try {
+			return await this._delete(priv)
+		} finally {
+			release()
+		}
 	}
 
 	async _delete (priv: Uint8Array): Promise<void> {

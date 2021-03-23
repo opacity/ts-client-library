@@ -26,6 +26,7 @@
 	"dependencies": {
 		"@opacity/middleware": "^0.0.20",
 		"@opacity/util": "^0.0.20",
+		"async-mutex": "^0.2.6",
 		"automerge": "git+https://github.com/automerge/automerge.git#performance",
 		"buffer": "^6.0.3",
 		"jssha": "^3.2.0",
