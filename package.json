@@ -24,8 +24,11 @@
 		}
 	},
 	"dependencies": {
+		"account-management": "file:packages/account-management",
 		"account-system": "file:packages/account-system",
 		"middleware": "file:packages/middleware",
+		"middleware-stub": "file:packages/middleware-stub",
+		"middleware-web": "file:packages/middleware-web",
 		"opaque": "file:packages/opaque",
 		"util": "file:packages/util"
 	},
