@@ -1,4 +1,4 @@
-import { Mutex } from "async-mutex"
+import { Semaphore } from "async-mutex"
 import Automerge from "automerge/src/automerge"
 import jssha from "jssha/src/sha256"
 
@@ -48,6 +48,7 @@ type MetadataDeleteRes = {
 
 export type MetadataAccessConfig = {
 	metadataNode: string
+	maxConcurrency?: number
 
 	crypto: CryptoMiddleware
 	net: NetworkMiddleware
@@ -106,10 +107,12 @@ export class MetadataAccess {
 	config: MetadataAccessConfig
 	dags: { [path: string]: DAG } = {}
 
-	_m = new Mutex()
+	_m: Semaphore
 
 	constructor (config: MetadataAccessConfig) {
 		this.config = config
+
+		this._m = new Semaphore(this.config.maxConcurrency || 1)
 	}
 
 	async change<T = unknown> (
@@ -117,7 +120,7 @@ export class MetadataAccess {
 		description: string,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 	): Promise<Automerge.Doc<T>> {
-		const release = await this._m.acquire()
+		const [_, release] = await this._m.acquire()
 
 		try {
 			path = cleanPath(path)
@@ -135,7 +138,7 @@ export class MetadataAccess {
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 		encryptKey: Uint8Array,
 	): Promise<Automerge.Doc<T>> {
-		const release = await this._m.acquire()
+		const [_, release] = await this._m.acquire()
 
 		try {
 			return await this._change<T>(priv, description, fn, true, encryptKey)
@@ -192,7 +195,7 @@ export class MetadataAccess {
 	}
 
 	async get<T> (path: string): Promise<Automerge.Doc<T> | undefined> {
-		const release = await this._m.acquire()
+		const [_, release] = await this._m.acquire()
 
 		try {
 			path = cleanPath(path)
@@ -240,7 +243,7 @@ export class MetadataAccess {
 	}
 
 	async getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
-		const release = await this._m.acquire()
+		const [_, release] = await this._m.acquire()
 
 		try {
 			return await this._getPublic(priv, decryptKey)
@@ -274,7 +277,7 @@ export class MetadataAccess {
 	}
 
 	async delete (path: string): Promise<void> {
-		const release = await this._m.acquire()
+		const [_, release] = await this._m.acquire()
 
 		try {
 			path = cleanPath(path)
@@ -287,7 +290,7 @@ export class MetadataAccess {
 	}
 
 	async deletePublic (priv: Uint8Array): Promise<void> {
-		const release = await this._m.acquire()
+		const [_, release] = await this._m.acquire()
 
 		try {
 			return await this._delete(priv)
