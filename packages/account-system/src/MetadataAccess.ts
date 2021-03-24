@@ -256,10 +256,10 @@ export class MetadataAccess {
 			this.config.metadataNode + "/api/v2/metadata/get-public",
 			undefined,
 			JSON.stringify({
-				requestBody: {
+				requestBody: JSON.stringify({
 					metadataV2Key: bytesToB64(pub),
-					timestamp: Date.now() / 1000,
-				},
+					timestamp: Math.floor(Date.now() / 1000),
+				}),
 			}),
 			(res) => new Response(res).json(),
 		)
