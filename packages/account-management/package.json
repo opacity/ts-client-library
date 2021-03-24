@@ -1,6 +1,6 @@
 {
 	"name": "@opacity/account-management",
-	"version": "0.0.22",
+	"version": "0.0.23",
 	"description": "> TODO: description",
 	"author": "Connor <13987924+CKH4@users.noreply.github.com>",
 	"homepage": "https://github.com/opacity/ts-client-library#readme",
@@ -24,8 +24,8 @@
 		"test": "echo \"Error: run tests from root\" && exit 1"
 	},
 	"dependencies": {
-		"@opacity/middleware": "^0.0.22",
-		"@opacity/util": "^0.0.22",
+		"@opacity/middleware": "^0.0.23",
+		"@opacity/util": "^0.0.23",
 		"tslib": "^2.1.0"
 	}
 }
