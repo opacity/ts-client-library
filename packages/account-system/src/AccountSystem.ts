@@ -1,3 +1,4 @@
+import { Mutex } from "async-mutex"
 import { posix } from "path-browserify"
 import Automerge from "automerge/src/automerge"
 
@@ -188,6 +189,8 @@ export class AccountSystem {
 		share: this.prefix + "/share",
 	}
 
+	_m = new Mutex()
+
 	constructor (config: AccountSystemConfig) {
 		this.config = config
 	}
@@ -205,6 +208,10 @@ export class AccountSystem {
 	}
 
 	async getFilesIndex (): Promise<FilesIndex> {
+		return await this._m.runExclusive(() => this._getFilesIndex())
+	}
+
+	async _getFilesIndex (): Promise<FilesIndex> {
 		const filesIndex =
 			(await this.config.metadataAccess.get<FilesIndex>(this.indexes.files)) ||
 			Automerge.from<FilesIndex>({ files: [] })
@@ -223,7 +230,11 @@ export class AccountSystem {
 	}
 
 	async getFileLocationByHandle (handle: Uint8Array): Promise<Uint8Array> {
-		const filesIndex = await this.getFilesIndex()
+		return await this._m.runExclusive(() => this._getFileLocationByHandle(handle))
+	}
+
+	async _getFileLocationByHandle (handle: Uint8Array): Promise<Uint8Array> {
+		const filesIndex = await this._getFilesIndex()
 
 		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.handle, handle))
 
@@ -235,7 +246,11 @@ export class AccountSystem {
 	}
 
 	async getFileIndexEntryByLocation (location: Uint8Array): Promise<FilesIndexEntry> {
-		const filesIndex = await this.getFilesIndex()
+		return await this._m.runExclusive(() => this._getFileIndexEntryByLocation(location))
+	}
+
+	async _getFileIndexEntryByLocation (location: Uint8Array): Promise<FilesIndexEntry> {
+		const filesIndex = await this._getFilesIndex()
 		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.location, location))
 
 		if (!fileEntry) {
@@ -253,6 +268,10 @@ export class AccountSystem {
 	}
 
 	async getFileMetadata (location: Uint8Array): Promise<FileMetadata> {
+		return await this._m.runExclusive(() => this._getFileMetadata(location))
+	}
+
+	async _getFileMetadata (location: Uint8Array): Promise<FileMetadata> {
 		const filePath = this.getFileDerivePath(location)
 
 		const doc = await this.config.metadataAccess.get<FileMetadata>(filePath)
@@ -282,11 +301,21 @@ export class AccountSystem {
 		meta: FileCreationMetadata,
 		pub: boolean,
 	): Promise<FileMetadata> {
+		return await this._m.runExclusive(() => this._addUpload(handle, path, filename, meta, pub))
+	}
+
+	async _addUpload (
+		handle: Uint8Array,
+		path: string,
+		filename: string,
+		meta: FileCreationMetadata,
+		pub: boolean,
+	): Promise<FileMetadata> {
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 		validateFilename(filename)
 
-		const folder = await this.addFolder(path)
+		const folder = await this._addFolder(path)
 		const folderDerive = folder.location
 
 		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
@@ -358,6 +387,10 @@ export class AccountSystem {
 	}
 
 	async finishUpload (location: Uint8Array): Promise<void> {
+		return await this._m.runExclusive(() => this._finishUpload(location))
+	}
+
+	async _finishUpload (location: Uint8Array): Promise<void> {
 		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
 			this.getFileDerivePath(location),
 			"Mark upload finished",
@@ -385,9 +418,13 @@ export class AccountSystem {
 	}
 
 	async renameFile (location: Uint8Array, newName: string): Promise<FileMetadata> {
+		return await this._m.runExclusive(() => this._renameFile(location, newName))
+	}
+
+	async _renameFile (location: Uint8Array, newName: string): Promise<FileMetadata> {
 		validateFilename(newName)
 
-		const fileIndexEntry = await this.getFileIndexEntryByLocation(location)
+		const fileIndexEntry = await this._getFileIndexEntryByLocation(location)
 		if (!fileIndexEntry) {
 			throw new AccountSystemNotFoundError("file", bytesToB64(location))
 		}
@@ -432,15 +469,19 @@ export class AccountSystem {
 	}
 
 	async moveFile (location: Uint8Array, newPath: string): Promise<FileMetadata> {
+		return await this._m.runExclusive(() => this._moveFile(location, newPath))
+	}
+
+	async _moveFile (location: Uint8Array, newPath: string): Promise<FileMetadata> {
 		newPath = cleanPath(newPath)
 		validateDirectoryPath(newPath)
 
-		const folder = await this.addFolder(newPath)
+		const folder = await this._addFolder(newPath)
 		const folderDerive = folder.location
 
-		const oldFileMeta = await this.getFileMetadata(location)
+		const oldFileMeta = await this._getFileMetadata(location)
 
-		const newFolder = await this.addFolder(newPath)
+		const newFolder = await this._addFolder(newPath)
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(newFolder.location),
@@ -497,8 +538,11 @@ export class AccountSystem {
 			public: !!newFileMeta.public,
 		}
 	}
-
 	async removeFile (location: Uint8Array) {
+		return await this._m.runExclusive(() => this._removeFile(location))
+	}
+
+	async _removeFile (location: Uint8Array) {
 		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, "Mark upload deleted", (doc) => {
 			const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
@@ -509,7 +553,7 @@ export class AccountSystem {
 			fileEntry.deleted = true
 		})
 
-		const fileMeta = await this.getFileMetadata(location)
+		const fileMeta = await this._getFileMetadata(location)
 		await this.config.metadataAccess.delete(this.getFileDerivePath(location))
 
 		await this.config.metadataAccess.change<FolderMetadata>(
@@ -532,6 +576,10 @@ export class AccountSystem {
 	}
 
 	async getFoldersIndex (): Promise<FoldersIndex> {
+		return await this._m.runExclusive(() => this._getFoldersIndex())
+	}
+
+	async _getFoldersIndex (): Promise<FoldersIndex> {
 		const foldersIndex =
 			(await this.config.metadataAccess.get<FoldersIndex>(this.indexes.folders)) ||
 			Automerge.from<FoldersIndex>({ folders: [] })
@@ -553,10 +601,14 @@ export class AccountSystem {
 	}
 
 	async getFolderIndexEntryByPath (path: string): Promise<FoldersIndexEntry> {
+		return await this._m.runExclusive(() => this._getFolderIndexEntryByPath(path))
+	}
+
+	async _getFolderIndexEntryByPath (path: string): Promise<FoldersIndexEntry> {
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
-		const foldersIndex = await this.getFoldersIndex()
+		const foldersIndex = await this._getFoldersIndex()
 		const folderEntry = foldersIndex.folders.find((folder) => folder.path == path)
 
 		if (!folderEntry) {
@@ -571,16 +623,24 @@ export class AccountSystem {
 	}
 
 	async getFoldersInFolderByPath (path: string): Promise<FoldersIndexEntry[]> {
+		return await this._m.runExclusive(() => this._getFoldersInFolderByPath(path))
+	}
+
+	async _getFoldersInFolderByPath (path: string): Promise<FoldersIndexEntry[]> {
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
-		const foldersIndex = await this.getFoldersIndex()
+		const foldersIndex = await this._getFoldersIndex()
 
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
 	async getFoldersInFolderByLocation (location: Uint8Array): Promise<FoldersIndexEntry[]> {
-		const foldersIndex = await this.getFoldersIndex()
+		return await this._m.runExclusive(() => this._getFoldersInFolderByLocation(location))
+	}
+
+	async _getFoldersInFolderByLocation (location: Uint8Array): Promise<FoldersIndexEntry[]> {
+		const foldersIndex = await this._getFoldersIndex()
 
 		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
 
@@ -594,14 +654,22 @@ export class AccountSystem {
 	}
 
 	async getFolderMetadataByPath (path: string): Promise<FolderMetadata> {
+		return await this._m.runExclusive(() => this._getFolderMetadataByPath(path))
+	}
+
+	async _getFolderMetadataByPath (path: string): Promise<FolderMetadata> {
 		path = cleanPath(path)
 
-		const folderEntry = await this.getFolderIndexEntryByPath(path)
+		const folderEntry = await this._getFolderIndexEntryByPath(path)
 
-		return await this.getFolderMetadataByLocation(folderEntry.location)
+		return await this._getFolderMetadataByLocation(folderEntry.location)
 	}
 
 	async getFolderMetadataByLocation (location: Uint8Array): Promise<FolderMetadata> {
+		return await this._m.runExclusive(() => this._getFolderMetadataByLocation(location))
+	}
+
+	async _getFolderMetadataByLocation (location: Uint8Array): Promise<FolderMetadata> {
 		const folderPath = this.getFolderDerivePath(location)
 
 		const doc = await this.config.metadataAccess.get<FolderMetadata>(folderPath)
@@ -625,19 +693,23 @@ export class AccountSystem {
 	}
 
 	async addFolder (path: string): Promise<FolderMetadata> {
+		return await this._m.runExclusive(() => this._addFolder(path))
+	}
+
+	async _addFolder (path: string): Promise<FolderMetadata> {
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
 		if (path != "/") {
-			await this.addFolder(posix.dirname(path))
+			await this._addFolder(posix.dirname(path))
 		}
 
-		let foldersIndexDoc = await this.getFoldersIndex()
+		let foldersIndexDoc = await this._getFoldersIndex()
 
 		const dup = foldersIndexDoc.folders.find((entry) => entry.path == path)
 
 		if (dup) {
-			return this.getFolderMetadataByLocation(dup.location)
+			return this._getFolderMetadataByLocation(dup.location)
 		}
 
 		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
@@ -681,14 +753,22 @@ export class AccountSystem {
 	}
 
 	async renameFolder (path: string, newName: string): Promise<FolderMetadata> {
+		return await this._m.runExclusive(() => this._renameFolder(path, newName))
+	}
+
+	async _renameFolder (path: string, newName: string): Promise<FolderMetadata> {
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 		validateFilename(newName)
 
-		return await this.moveFolder(path, posix.join(posix.dirname(path), newName))
+		return await this._moveFolder(path, posix.join(posix.dirname(path), newName))
 	}
 
 	async moveFolder (oldPath: string, newPath: string): Promise<FolderMetadata> {
+		return await this._m.runExclusive(() => this._moveFolder(oldPath, newPath))
+	}
+
+	async _moveFolder (oldPath: string, newPath: string): Promise<FolderMetadata> {
 		oldPath = cleanPath(oldPath)
 		newPath = cleanPath(newPath)
 		validateDirectoryPath(oldPath)
@@ -696,17 +776,17 @@ export class AccountSystem {
 
 		const op = posix.dirname(oldPath) == posix.dirname(newPath) ? "Rename" : "Move"
 
-		const newFolder = await this.getFolderIndexEntryByPath(newPath).catch(() => {})
+		const newFolder = await this._getFolderIndexEntryByPath(newPath).catch(() => {})
 		if (newFolder) {
 			throw new AccountSystemAlreadyExistsError("folder", newPath)
 		}
 
-		const folderEntry = await this.getFolderIndexEntryByPath(oldPath)
+		const folderEntry = await this._getFolderIndexEntryByPath(oldPath)
 		if (!folderEntry) {
 			throw new AccountSystemNotFoundError("folder", oldPath)
 		}
 
-		const foldersIndex = await this.getFoldersIndex()
+		const foldersIndex = await this._getFoldersIndex()
 
 		await this.config.metadataAccess.change<FoldersIndex>(this.indexes.folders, `${op} folder`, (doc) => {
 			const subs = doc.folders.filter((folderEntry) => posix.relative(oldPath, folderEntry.path).indexOf("../") != 0)
@@ -755,22 +835,30 @@ export class AccountSystem {
 		}
 	}
 
-	async removeFolderByPath (path: string) {
-		path = cleanPath(path)
-
-		const folderEntry = await this.getFolderIndexEntryByPath(path)
-
-		return await this.removeFolderByLocation(folderEntry.location)
+	async removeFolderByPath (path: string): Promise<void> {
+		return await this._m.runExclusive(() => this._removeFolderByPath(path))
 	}
 
-	async removeFolderByLocation (location: Uint8Array) {
-		const folderMeta = await this.getFolderMetadataByLocation(location)
+	async _removeFolderByPath (path: string): Promise<void> {
+		path = cleanPath(path)
+
+		const folderEntry = await this._getFolderIndexEntryByPath(path)
+
+		return await this._removeFolderByLocation(folderEntry.location)
+	}
+
+	async removeFolderByLocation (location: Uint8Array): Promise<void> {
+		return await this._m.runExclusive(() => this._removeFolderByLocation(location))
+	}
+
+	async _removeFolderByLocation (location: Uint8Array): Promise<void> {
+		const folderMeta = await this._getFolderMetadataByLocation(location)
 
 		if (folderMeta.files.length) {
 			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
 		}
 
-		const childFolders = await this.getFoldersInFolderByLocation(location)
+		const childFolders = await this._getFoldersInFolderByLocation(location)
 
 		if (childFolders.length) {
 			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
@@ -802,6 +890,10 @@ export class AccountSystem {
 	}
 
 	async getShareIndex (): Promise<ShareIndex> {
+		return await this._m.runExclusive(() => this._getShareIndex())
+	}
+
+	async _getShareIndex (): Promise<ShareIndex> {
 		const sharedIndex =
 			(await this.config.metadataAccess.get<ShareIndex>(this.indexes.share)) ||
 			Automerge.from<ShareIndex>({ shared: [] })
@@ -817,10 +909,14 @@ export class AccountSystem {
 	}
 
 	async share (filesInit: ShareFileMetadataInit[]): Promise<ShareMetadata> {
+		return await this._m.runExclusive(() => this._share(filesInit))
+	}
+
+	async _share (filesInit: ShareFileMetadataInit[]): Promise<ShareMetadata> {
 		const files = await Promise.all(
 			filesInit.map(
 				async (fileInit): Promise<ShareFileMetadata> => {
-					const meta = await this.getFileMetadata(fileInit.location)
+					const meta = await this._getFileMetadata(fileInit.location)
 
 					return {
 						handle: meta.handle,
