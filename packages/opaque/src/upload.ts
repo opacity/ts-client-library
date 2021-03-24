@@ -230,7 +230,16 @@ export class Upload extends EventTarget implements IUploadEvents {
 
 		const u = this
 
-		const encryptedMeta = await u.config.crypto.encrypt(u._key!, new TextEncoder().encode(JSON.stringify(u._metadata)))
+		const encryptedMeta = await u.config.crypto.encrypt(
+			u._key!,
+			new TextEncoder().encode(
+				JSON.stringify({
+					lastModified: u._metadata.lastModified,
+					size: u._metadata.size,
+					type: u._metadata.type,
+				} as FileMeta),
+			),
+		)
 
 		const fd = await getPayloadFD<UploadInitPayload, UploadInitExtraPayload>({
 			crypto: u.config.crypto,
