@@ -1,6 +1,6 @@
 import {
 	ReadableStream as ReadableStreamPolyfill,
-	WritableStream,
+	WritableStream as WritableStreamPolyfill,
 	TransformStream,
 } from "web-streams-polyfill/ponyfill"
 
@@ -25,6 +25,25 @@ export const polyfillReadableStream = <T>(rs: ReadableStream<T>, strategy?: Queu
 	)
 }
 
+export const polyfillWritableStream = <T>(ws: WritableStream<T>, strategy?: QueuingStrategy<T>) => {
+	const writer = ws.getWriter()
+
+	return new WritableStreamPolyfill<T>(
+		{
+			async write (value: T) {
+				return await writer.write(value)
+			},
+			async abort () {
+				return await writer.abort()
+			},
+			async close () {
+				return await writer.close()
+			},
+		},
+		strategy,
+	)
+}
+
 type Hooks = {
 	transform?: (c: Uint8Array) => void
 	enqueue?: (c: Uint8Array) => void
@@ -41,7 +60,7 @@ export class Uint8ArrayChunkStream implements TransformStream<Uint8Array, Uint8A
 	_transformer: TransformStream<Uint8Array, Uint8Array>
 
 	readable: ReadableStreamPolyfill<Uint8Array>
-	writable: WritableStream<Uint8Array>
+	writable: WritableStreamPolyfill<Uint8Array>
 
 	constructor (
 		size: number,
