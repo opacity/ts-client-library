@@ -173,11 +173,11 @@ export class MetadataAccess {
 		const payload = await getPayload<MetadataAddPayload>({
 			crypto: this.config.crypto,
 			payload: {
-				metadataV2Key: bytesToB64(pub),
-				metadataV2Vertex: bytesToB64(v.binary),
-				metadataV2Edges: edges.map((edge) => bytesToB64(edge.binary)),
-				metadataV2Sig: bytesToB64(await this.config.crypto.sign(priv, await dag.digest(v.id, sha256))),
 				isPublic,
+				metadataV2Edges: edges.map((edge) => bytesToB64(edge.binary)),
+				metadataV2Key: bytesToB64(pub),
+				metadataV2Sig: bytesToB64(await this.config.crypto.sign(priv, await dag.digest(v.id, sha256))),
+				metadataV2Vertex: bytesToB64(v.binary),
 			},
 		})
 
