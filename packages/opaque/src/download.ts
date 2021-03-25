@@ -16,7 +16,7 @@ import {
 import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "./filemeta"
 import { OQ } from "@opacity/util/src/oqueue"
-import { ReadableStream, TransformStream, WritableStream } from "@opacity/util/src/streams"
+import { polyfillReadableStreamIfNeeded, ReadableStream, TransformStream, WritableStream } from "@opacity/util/src/streams"
 import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 
@@ -300,7 +300,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 									}`,
 								},
 								undefined,
-								async (rs) => rs,
+								async (rs) => rs ? polyfillReadableStreamIfNeeded(rs) as ReadableStream<Uint8Array> : undefined,
 							)
 							.catch(d._reject)
 
