@@ -1,5 +1,3 @@
-import { TransformStream, WritableStream } from "web-streams-polyfill/ponyfill"
-
 import { blockSize, blockSizeOnFS, numberOfBlocks, sizeOnFS } from "@opacity/util/src/blocks"
 import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
@@ -20,7 +18,7 @@ import {
 import { numberOfPartsOnFS, partSize } from "@opacity/util/src/parts"
 import { OQ } from "@opacity/util/src/oqueue"
 import { Retry } from "@opacity/util/src/retry"
-import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
+import { ReadableStream, TransformStream, WritableStream, Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 
 export type UploadConfig = {
 	storageNode: string
@@ -285,7 +283,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 				},
 			},
 			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize!.encrypt! * partSize + 1 }),
-		)
+		) as TransformStream<Uint8Array, Uint8Array>
 
 		u._output.readable.pipeThrough(partCollector).pipeTo(
 			new WritableStream<Uint8Array>({
@@ -386,7 +384,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 				async close () {
 					await encryptQueue.waitForClose()
 				},
-			}),
+			}) as WritableStream<Uint8Array>,
 		)
 		;(async () => {
 			encryptQueue.add(

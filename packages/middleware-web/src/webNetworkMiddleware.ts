@@ -4,6 +4,7 @@ import {
 	NetworkMiddlewareMapReturn,
 	NetworkMiddlewareResponse,
 } from "@opacity/middleware"
+import { polyfillReadableStreamIfNeeded } from "@opacity/util/src/streams"
 
 const fetchAdapter = async <T>(
 	method: string,
@@ -16,7 +17,7 @@ const fetchAdapter = async <T>(
 
 	return {
 		headers: res.headers,
-		data: await mapReturn(res.body || undefined),
+		data: await mapReturn(res.body ? polyfillReadableStreamIfNeeded(res.body) as ReadableStream<Uint8Array> : undefined),
 		ok: res.ok,
 		redirected: res.redirected,
 		status: res.status,

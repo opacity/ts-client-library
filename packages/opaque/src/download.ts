@@ -1,5 +1,3 @@
-import { ReadableStream, WritableStream, TransformStream } from "web-streams-polyfill/ponyfill"
-
 import { blockSizeOnFS, numberOfBlocks, numberOfBlocksOnFS, sizeOnFS } from "@opacity/util/src/blocks"
 import { blocksPerPart, numberOfPartsOnFS, partSizeOnFS } from "@opacity/util/src/parts"
 import { bytesToHex } from "@opacity/util/src/hex"
@@ -18,7 +16,7 @@ import {
 import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "./filemeta"
 import { OQ } from "@opacity/util/src/oqueue"
-import { polyfillReadableStream } from "@opacity/util/src/streams"
+import { ReadableStream, TransformStream, WritableStream } from "@opacity/util/src/streams"
 import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 
@@ -302,7 +300,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 									}`,
 								},
 								undefined,
-								async (rs) => (rs ? polyfillReadableStream(rs) : undefined),
+								async (rs) => rs,
 							)
 							.catch(d._reject)
 
@@ -328,7 +326,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 
 										controller.enqueue(chunk)
 									},
-								}),
+								}) as ReadableWritablePair<Uint8Array, Uint8Array>,
 							)
 							.pipeThrough(new Uint8ArrayChunkStream(partSizeOnFS))
 							.pipeTo(
@@ -368,7 +366,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 											)
 										}
 									},
-								}),
+								}) as WritableStream<Uint8Array>,
 							)
 
 						await decryptQueue.waitForCommit(Math.min((partIndex + 1) * blocksPerPart, d._numberOfBlocks!) - 1)
@@ -403,7 +401,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 			cancel () {
 				d._cancelled = true
 			},
-		})
+		}) as ReadableStream<Uint8Array>
 
 		return d._output
 	}
