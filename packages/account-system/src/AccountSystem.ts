@@ -626,14 +626,15 @@ export class AccountSystem {
 
 		// TODO: find orphans
 
-		const duplicates = new Set(foldersIndex.folders.map(({ path }) => path).filter((p, i, arr) => arr.indexOf(p) != i))
+		const duplicates = new Set((foldersIndex.folders || []).map(({ path }) => path).filter((p, i, arr) => arr.indexOf(p) != i))
 
 		// TODO: merge duplicate folders
 		for (let dup of duplicates) {
 		}
 
+		// TODO: find underlying cause of folders being undefined
 		return {
-			folders: foldersIndex.folders.map((folder) => ({
+			folders: (foldersIndex.folders || []).map((folder) => ({
 				location: unfreezeUint8Array(folder.location),
 				path: folder.path,
 			})),
