@@ -208,10 +208,14 @@ export class AccountSystem {
 	}
 
 	async getFilesIndex (): Promise<FilesIndex> {
+		// console.log("getFilesIndex(", ")")
+
 		return await this._m.runExclusive(() => this._getFilesIndex())
 	}
 
 	async _getFilesIndex (): Promise<FilesIndex> {
+		// console.log("_getFilesIndex(", ")")
+
 		const filesIndex =
 			(await this.config.metadataAccess.get<FilesIndex>(this.indexes.files)) ||
 			Automerge.from<FilesIndex>({ files: [] })
@@ -230,10 +234,14 @@ export class AccountSystem {
 	}
 
 	async getFileLocationByHandle (handle: Uint8Array): Promise<Uint8Array> {
+		// console.log("getFileLocationByHandle(", handle, ")")
+
 		return await this._m.runExclusive(() => this._getFileLocationByHandle(handle))
 	}
 
 	async _getFileLocationByHandle (handle: Uint8Array): Promise<Uint8Array> {
+		// console.log("_getFileLocationByHandle(", handle, ")")
+
 		const filesIndex = await this._getFilesIndex()
 
 		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.handle, handle))
@@ -246,10 +254,14 @@ export class AccountSystem {
 	}
 
 	async getFileIndexEntryByLocation (location: Uint8Array): Promise<FilesIndexEntry> {
+		// console.log("getFileIndexEntryByLocation(", location, ")")
+
 		return await this._m.runExclusive(() => this._getFileIndexEntryByLocation(location))
 	}
 
 	async _getFileIndexEntryByLocation (location: Uint8Array): Promise<FilesIndexEntry> {
+		// console.log("_getFileIndexEntryByLocation(", location, ")")
+
 		const filesIndex = await this._getFilesIndex()
 		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.location, location))
 
@@ -268,10 +280,14 @@ export class AccountSystem {
 	}
 
 	async getFileMetadata (location: Uint8Array): Promise<FileMetadata> {
+		// console.log("getFileMetadata(", location, ")")
+
 		return await this._m.runExclusive(() => this._getFileMetadata(location))
 	}
 
 	async _getFileMetadata (location: Uint8Array): Promise<FileMetadata> {
+		// console.log("_getFileMetadata(", location, ")")
+
 		const filePath = this.getFileDerivePath(location)
 
 		const doc = await this.config.metadataAccess.get<FileMetadata>(filePath)
@@ -301,6 +317,8 @@ export class AccountSystem {
 		meta: FileCreationMetadata,
 		pub: boolean,
 	): Promise<FileMetadata> {
+		// console.log("addUpload(", handle, path, filename, meta, pub, ")")
+
 		return await this._m.runExclusive(() => this._addUpload(handle, path, filename, meta, pub))
 	}
 
@@ -311,6 +329,8 @@ export class AccountSystem {
 		meta: FileCreationMetadata,
 		pub: boolean,
 	): Promise<FileMetadata> {
+		// console.log("_addUpload(", handle, path, filename, meta, pub, ")")
+
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 		validateFilename(filename)
@@ -387,10 +407,14 @@ export class AccountSystem {
 	}
 
 	async finishUpload (location: Uint8Array): Promise<void> {
+		// console.log("finishUpload(", location, ")")
+
 		return await this._m.runExclusive(() => this._finishUpload(location))
 	}
 
 	async _finishUpload (location: Uint8Array): Promise<void> {
+		// console.log("_finishUpload(", location, ")")
+
 		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
 			this.getFileDerivePath(location),
 			"Mark upload finished",
@@ -418,10 +442,14 @@ export class AccountSystem {
 	}
 
 	async renameFile (location: Uint8Array, newName: string): Promise<FileMetadata> {
+		// console.log("renameFile(", location, newName, ")")
+
 		return await this._m.runExclusive(() => this._renameFile(location, newName))
 	}
 
 	async _renameFile (location: Uint8Array, newName: string): Promise<FileMetadata> {
+		// console.log("_renameFile(", location, newName, ")")
+
 		validateFilename(newName)
 
 		const fileIndexEntry = await this._getFileIndexEntryByLocation(location)
@@ -469,10 +497,14 @@ export class AccountSystem {
 	}
 
 	async moveFile (location: Uint8Array, newPath: string): Promise<FileMetadata> {
+		// console.log("moveFile(", location, newPath, ")")
+
 		return await this._m.runExclusive(() => this._moveFile(location, newPath))
 	}
 
 	async _moveFile (location: Uint8Array, newPath: string): Promise<FileMetadata> {
+		// console.log("_moveFile(", location, newPath, ")")
+
 		newPath = cleanPath(newPath)
 		validateDirectoryPath(newPath)
 
@@ -539,10 +571,14 @@ export class AccountSystem {
 		}
 	}
 	async removeFile (location: Uint8Array) {
+		// console.log("removeFile(", location, ")")
+
 		return await this._m.runExclusive(() => this._removeFile(location))
 	}
 
 	async _removeFile (location: Uint8Array) {
+		// console.log("_removeFile(", location, ")")
+
 		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, "Mark upload deleted", (doc) => {
 			const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
@@ -576,10 +612,14 @@ export class AccountSystem {
 	}
 
 	async getFoldersIndex (): Promise<FoldersIndex> {
+		// console.log("getFoldersIndex(", ")")
+
 		return await this._m.runExclusive(() => this._getFoldersIndex())
 	}
 
 	async _getFoldersIndex (): Promise<FoldersIndex> {
+		// console.log("_getFoldersIndex(", ")")
+
 		const foldersIndex =
 			(await this.config.metadataAccess.get<FoldersIndex>(this.indexes.folders)) ||
 			Automerge.from<FoldersIndex>({ folders: [] })
@@ -601,10 +641,14 @@ export class AccountSystem {
 	}
 
 	async getFolderIndexEntryByPath (path: string): Promise<FoldersIndexEntry> {
+		// console.log("getFolderIndexEntryByPath(", path, ")")
+
 		return await this._m.runExclusive(() => this._getFolderIndexEntryByPath(path))
 	}
 
 	async _getFolderIndexEntryByPath (path: string): Promise<FoldersIndexEntry> {
+		// console.log("_getFolderIndexEntryByPath(", path, ")")
+
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
@@ -623,10 +667,14 @@ export class AccountSystem {
 	}
 
 	async getFoldersInFolderByPath (path: string): Promise<FoldersIndexEntry[]> {
+		// console.log("getFoldersInFolderByPath(", path, ")")
+
 		return await this._m.runExclusive(() => this._getFoldersInFolderByPath(path))
 	}
 
 	async _getFoldersInFolderByPath (path: string): Promise<FoldersIndexEntry[]> {
+		// console.log("_getFoldersInFolderByPath(", path, ")")
+
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
@@ -636,10 +684,14 @@ export class AccountSystem {
 	}
 
 	async getFoldersInFolderByLocation (location: Uint8Array): Promise<FoldersIndexEntry[]> {
+		// console.log("getFoldersInFolderByLocation(", location, ")")
+
 		return await this._m.runExclusive(() => this._getFoldersInFolderByLocation(location))
 	}
 
 	async _getFoldersInFolderByLocation (location: Uint8Array): Promise<FoldersIndexEntry[]> {
+		// console.log("_getFoldersInFolderByLocation(", location, ")")
+
 		const foldersIndex = await this._getFoldersIndex()
 
 		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
@@ -654,10 +706,14 @@ export class AccountSystem {
 	}
 
 	async getFolderMetadataByPath (path: string): Promise<FolderMetadata> {
+		// console.log("getFolderMetadataByPath(", path, ")")
+
 		return await this._m.runExclusive(() => this._getFolderMetadataByPath(path))
 	}
 
 	async _getFolderMetadataByPath (path: string): Promise<FolderMetadata> {
+		// console.log("_getFolderMetadataByPath(", path, ")")
+
 		path = cleanPath(path)
 
 		const folderEntry = await this._getFolderIndexEntryByPath(path)
@@ -666,10 +722,14 @@ export class AccountSystem {
 	}
 
 	async getFolderMetadataByLocation (location: Uint8Array): Promise<FolderMetadata> {
+		// console.log("getFolderMetadataByLocation(", location, ")")
+
 		return await this._m.runExclusive(() => this._getFolderMetadataByLocation(location))
 	}
 
 	async _getFolderMetadataByLocation (location: Uint8Array): Promise<FolderMetadata> {
+		// console.log("_getFolderMetadataByLocation(", location, ")")
+
 		const folderPath = this.getFolderDerivePath(location)
 
 		const doc = await this.config.metadataAccess.get<FolderMetadata>(folderPath)
@@ -693,10 +753,18 @@ export class AccountSystem {
 	}
 
 	async addFolder (path: string): Promise<FolderMetadata> {
+		// console.log("addFolder(", path, ")")
+
+		// adding folders can result in duplication
+		// marking the cache dirty reduces this risk
+		await this.config.metadataAccess.markCacheDirty(this.indexes.folders)
+
 		return await this._m.runExclusive(() => this._addFolder(path))
 	}
 
 	async _addFolder (path: string): Promise<FolderMetadata> {
+		// console.log("_addFolder(", path, ")")
+
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
@@ -753,10 +821,14 @@ export class AccountSystem {
 	}
 
 	async renameFolder (path: string, newName: string): Promise<FolderMetadata> {
+		// console.log("renameFolder(", path, newName, ")")
+
 		return await this._m.runExclusive(() => this._renameFolder(path, newName))
 	}
 
 	async _renameFolder (path: string, newName: string): Promise<FolderMetadata> {
+		// console.log("_renameFolder(", path, newName, ")")
+
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 		validateFilename(newName)
@@ -765,10 +837,14 @@ export class AccountSystem {
 	}
 
 	async moveFolder (oldPath: string, newPath: string): Promise<FolderMetadata> {
+		// console.log("moveFolder(", oldPath, newPath, ")")
+
 		return await this._m.runExclusive(() => this._moveFolder(oldPath, newPath))
 	}
 
 	async _moveFolder (oldPath: string, newPath: string): Promise<FolderMetadata> {
+		// console.log("_moveFolder(", oldPath, newPath, ")")
+
 		oldPath = cleanPath(oldPath)
 		newPath = cleanPath(newPath)
 		validateDirectoryPath(oldPath)
@@ -786,6 +862,9 @@ export class AccountSystem {
 			throw new AccountSystemNotFoundError("folder", oldPath)
 		}
 
+		// moving folders can result in duplication
+		// marking the cache dirty reduces this risk
+		await this.config.metadataAccess.markCacheDirty(this.indexes.folders)
 		const foldersIndex = await this._getFoldersIndex()
 
 		await this.config.metadataAccess.change<FoldersIndex>(this.indexes.folders, `${op} folder`, (doc) => {
@@ -836,10 +915,14 @@ export class AccountSystem {
 	}
 
 	async removeFolderByPath (path: string): Promise<void> {
+		// console.log("removeFolderByPath(", path, ")")
+
 		return await this._m.runExclusive(() => this._removeFolderByPath(path))
 	}
 
 	async _removeFolderByPath (path: string): Promise<void> {
+		// console.log("_removeFolderByPath(", path, ")")
+
 		path = cleanPath(path)
 
 		const folderEntry = await this._getFolderIndexEntryByPath(path)
@@ -848,10 +931,14 @@ export class AccountSystem {
 	}
 
 	async removeFolderByLocation (location: Uint8Array): Promise<void> {
+		// console.log("removeFolderByLocation(", location, ")")
+
 		return await this._m.runExclusive(() => this._removeFolderByLocation(location))
 	}
 
 	async _removeFolderByLocation (location: Uint8Array): Promise<void> {
+		// console.log("_removeFolderByLocation(", location, ")")
+
 		const folderMeta = await this._getFolderMetadataByLocation(location)
 
 		if (folderMeta.files.length) {
@@ -890,10 +977,14 @@ export class AccountSystem {
 	}
 
 	async getShareIndex (): Promise<ShareIndex> {
+		// console.log("getShareIndex(", ")")
+
 		return await this._m.runExclusive(() => this._getShareIndex())
 	}
 
 	async _getShareIndex (): Promise<ShareIndex> {
+		// console.log("_getShareIndex(", ")")
+
 		const sharedIndex =
 			(await this.config.metadataAccess.get<ShareIndex>(this.indexes.share)) ||
 			Automerge.from<ShareIndex>({ shared: [] })
@@ -909,10 +1000,14 @@ export class AccountSystem {
 	}
 
 	async share (filesInit: ShareFileMetadataInit[]): Promise<ShareMetadata> {
+		// console.log("share(", filesInit, ")")
+
 		return await this._m.runExclusive(() => this._share(filesInit))
 	}
 
 	async _share (filesInit: ShareFileMetadataInit[]): Promise<ShareMetadata> {
+		// console.log("_share(", filesInit, ")")
+
 		const files = await Promise.all(
 			filesInit.map(
 				async (fileInit): Promise<ShareFileMetadata> => {
@@ -977,6 +1072,8 @@ export class AccountSystem {
 	}
 
 	async getShared (handle: Uint8Array): Promise<ShareMetadata> {
+		// console.log("getShared(", handle, ")")
+
 		const locationKey = handle.slice(0, 32)
 		const encryptionKey = handle.slice(32)
 
