@@ -114,7 +114,6 @@ export class MetadataAccess {
 
 	constructor (config: MetadataAccessConfig) {
 		this.config = config
-
 	}
 
 	async markCacheDirty (path: string) {
@@ -228,8 +227,21 @@ export class MetadataAccess {
 		const pub = await this.config.crypto.getPublicKey(priv)
 		const pubString = bytesToB64(pub)
 
-		if (!this.cache[pubString] || this.cache[pubString].dirty == true || Date.now() - this.cache[pubString].lastAccess > 60 * 1000) {
-			console.warn("Cache: cache not used for", pubString, "because", (!this.cache[pubString]) ? "item was not found in cache" : (this.cache[pubString].dirty) ? "cache entry was marked dirty" : "cache was expired " + (Date.now() - this.cache[pubString].lastAccess))
+		if (
+			!this.cache[pubString] ||
+			this.cache[pubString].dirty == true ||
+			Date.now() - this.cache[pubString].lastAccess > 60 * 1000
+		) {
+			console.warn(
+				"Cache: cache not used for",
+				pubString,
+				"because",
+				!this.cache[pubString]
+					? "item was not found in cache"
+					: this.cache[pubString].dirty
+						? "cache entry was marked dirty"
+						: "cache was expired " + (Date.now() - this.cache[pubString].lastAccess),
+			)
 			const payload = await getPayload<MetadataGetPayload>({
 				crypto: this.config.crypto,
 				payload: {
@@ -258,7 +270,8 @@ export class MetadataAccess {
 
 			const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
 			this.dags[pubString] = dag
-		} else {
+		}
+		else {
 			console.info("Cache: using cached value for", pubString)
 
 			return this.cache[pubString].doc as Automerge.Doc<T>
@@ -289,7 +302,11 @@ export class MetadataAccess {
 		const pub = await this.config.crypto.getPublicKey(priv)
 		const pubString = bytesToB64(pub)
 
-		if (!this.cache[pubString] || this.cache[pubString].dirty == true || Date.now() - this.cache[pubString].lastAccess > 60 * 1000) {
+		if (
+			!this.cache[pubString] ||
+			this.cache[pubString].dirty == true ||
+			Date.now() - this.cache[pubString].lastAccess > 60 * 1000
+		) {
 			const res = await this.config.net.POST<MetadataGetRes>(
 				this.config.metadataNode + "/api/v2/metadata/get-public",
 				undefined,
@@ -304,13 +321,16 @@ export class MetadataAccess {
 
 			const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
 			this.dags[pubString] = dag
-		} else {
+		}
+		else {
 			// console.info("Using cached value for", pubString)
 
 			return this.cache[pubString].doc as Automerge.Doc<T>
 		}
 
-		const decrypted = await Promise.all(this.dags[pubString].nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey, data)))
+		const decrypted = await Promise.all(
+			this.dags[pubString].nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey, data)),
+		)
 		const changes = decrypted.map((data) => unpackChanges(data)).flat()
 
 		const doc = Automerge.applyChanges(Automerge.init<T>(), changes)
