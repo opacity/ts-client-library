@@ -236,11 +236,7 @@ export class MetadataAccess {
 
 		const cached = this.cache[pubString]
 
-		if (
-			!cached ||
-			cached.dirty == true ||
-			Date.now() - cached.lastAccess > 60 * 1000
-		) {
+		if (!cached || cached.dirty == true || Date.now() - cached.lastAccess > 60 * 1000) {
 			console.warn(
 				"Cache: cache not used for",
 				pubString,
@@ -312,11 +308,7 @@ export class MetadataAccess {
 
 		const cached = this.cache[pubString]
 
-		if (
-			!cached ||
-			cached.dirty == true ||
-			Date.now() - cached.lastAccess > 60 * 1000
-		) {
+		if (!cached || cached.dirty == true || Date.now() - cached.lastAccess > 60 * 1000) {
 			const res = await this.config.net.POST<MetadataGetRes>(
 				this.config.metadataNode + "/api/v2/metadata/get-public",
 				undefined,
