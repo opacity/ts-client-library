@@ -104,6 +104,10 @@ export class Account {
 			(body) => new Response(body).json(),
 		)
 
+		if (!res.ok) {
+			throw new Error("Error getting account information: " + JSON.stringify(res.data))
+		}
+
 		return res.data
 	}
 
@@ -149,6 +153,10 @@ export class Account {
 			JSON.stringify(payload),
 			(body) => new Response(body).json(),
 		)
+
+		if (!res.ok || !res.data.invoice) {
+			throw new Error("Error getting invoice")
+		}
 
 		return res.data.invoice
 	}
