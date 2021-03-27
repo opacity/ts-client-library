@@ -136,7 +136,7 @@ export class UploadMetadataEvent extends CustomEvent<UploadMetadataEventData> {
 type UploadStartedEventData = { time: number; numberOfBlocks: number; numberOfParts: number }
 export class UploadStartedEvent extends CustomEvent<UploadStartedEventData> {
 	constructor (data: UploadStartedEventData) {
-		super(UploadEvents.FINISH, { detail: data })
+		super(UploadEvents.START, { detail: data })
 	}
 }
 type UploadFinishedEventData = { start: number; end: number; duration: number; realDuration: number }
