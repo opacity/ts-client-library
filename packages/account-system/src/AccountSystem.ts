@@ -207,17 +207,17 @@ export class AccountSystem {
 		return this.prefix + "/file/" + bytesToB64(location)
 	}
 
-	async getFilesIndex (): Promise<FilesIndex> {
+	async getFilesIndex (markCacheDirty = false): Promise<FilesIndex> {
 		// console.log("getFilesIndex(", ")")
 
-		return await this._m.runExclusive(() => this._getFilesIndex())
+		return await this._m.runExclusive(() => this._getFilesIndex(markCacheDirty))
 	}
 
-	async _getFilesIndex (): Promise<FilesIndex> {
+	async _getFilesIndex (markCacheDirty = false): Promise<FilesIndex> {
 		// console.log("_getFilesIndex(", ")")
 
 		const filesIndex =
-			(await this.config.metadataAccess.get<FilesIndex>(this.indexes.files)) ||
+			(await this.config.metadataAccess.get<FilesIndex>(this.indexes.files, markCacheDirty)) ||
 			Automerge.from<FilesIndex>({ files: [] })
 
 		// TODO: find orphans
@@ -233,16 +233,16 @@ export class AccountSystem {
 		}
 	}
 
-	async getFileLocationByHandle (handle: Uint8Array): Promise<Uint8Array> {
+	async getFileLocationByHandle (handle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
 		// console.log("getFileLocationByHandle(", handle, ")")
 
-		return await this._m.runExclusive(() => this._getFileLocationByHandle(handle))
+		return await this._m.runExclusive(() => this._getFileLocationByHandle(handle, markCacheDirty))
 	}
 
-	async _getFileLocationByHandle (handle: Uint8Array): Promise<Uint8Array> {
+	async _getFileLocationByHandle (handle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
 		// console.log("_getFileLocationByHandle(", handle, ")")
 
-		const filesIndex = await this._getFilesIndex()
+		const filesIndex = await this._getFilesIndex(markCacheDirty)
 
 		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.handle, handle))
 
@@ -253,16 +253,16 @@ export class AccountSystem {
 		return fileEntry.location
 	}
 
-	async getFileIndexEntryByLocation (location: Uint8Array): Promise<FilesIndexEntry> {
+	async getFileIndexEntryByLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
 		// console.log("getFileIndexEntryByLocation(", location, ")")
 
-		return await this._m.runExclusive(() => this._getFileIndexEntryByLocation(location))
+		return await this._m.runExclusive(() => this._getFileIndexEntryByLocation(location, markCacheDirty))
 	}
 
-	async _getFileIndexEntryByLocation (location: Uint8Array): Promise<FilesIndexEntry> {
+	async _getFileIndexEntryByLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
 		// console.log("_getFileIndexEntryByLocation(", location, ")")
 
-		const filesIndex = await this._getFilesIndex()
+		const filesIndex = await this._getFilesIndex(markCacheDirty)
 		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.location, location))
 
 		if (!fileEntry) {
@@ -279,18 +279,18 @@ export class AccountSystem {
 		}
 	}
 
-	async getFileMetadata (location: Uint8Array): Promise<FileMetadata> {
+	async getFileMetadata (location: Uint8Array, markCacheDirty = false): Promise<FileMetadata> {
 		// console.log("getFileMetadata(", location, ")")
 
-		return await this._m.runExclusive(() => this._getFileMetadata(location))
+		return await this._m.runExclusive(() => this._getFileMetadata(location, markCacheDirty))
 	}
 
-	async _getFileMetadata (location: Uint8Array): Promise<FileMetadata> {
+	async _getFileMetadata (location: Uint8Array, markCacheDirty = false): Promise<FileMetadata> {
 		// console.log("_getFileMetadata(", location, ")")
 
 		const filePath = this.getFileDerivePath(location)
 
-		const doc = await this.config.metadataAccess.get<FileMetadata>(filePath)
+		const doc = await this.config.metadataAccess.get<FileMetadata>(filePath, markCacheDirty)
 
 		if (!doc) {
 			throw new AccountSystemNotFoundError("file", filePath)
@@ -316,10 +316,11 @@ export class AccountSystem {
 		filename: string,
 		meta: FileCreationMetadata,
 		pub: boolean,
+		markCacheDirty = false
 	): Promise<FileMetadata> {
 		// console.log("addUpload(", handle, path, filename, meta, pub, ")")
 
-		return await this._m.runExclusive(() => this._addUpload(handle, path, filename, meta, pub))
+		return await this._m.runExclusive(() => this._addUpload(handle, path, filename, meta, pub, markCacheDirty))
 	}
 
 	async _addUpload (
@@ -328,6 +329,7 @@ export class AccountSystem {
 		filename: string,
 		meta: FileCreationMetadata,
 		pub: boolean,
+		markCacheDirty = false
 	): Promise<FileMetadata> {
 		// console.log("_addUpload(", handle, path, filename, meta, pub, ")")
 
@@ -335,7 +337,7 @@ export class AccountSystem {
 		validateDirectoryPath(path)
 		validateFilename(filename)
 
-		const folder = await this._addFolder(path)
+		const folder = await this._addFolder(path, markCacheDirty)
 		const folderDerive = folder.location
 
 		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
@@ -356,6 +358,7 @@ export class AccountSystem {
 					deleted: false,
 				})
 			},
+			markCacheDirty,
 		)
 
 		await this.config.metadataAccess.change<FolderMetadata>(
@@ -373,6 +376,7 @@ export class AccountSystem {
 				doc.modified = Date.now()
 				doc.size++
 			},
+			markCacheDirty,
 		)
 
 		const file = await this.config.metadataAccess.change<FileMetadata>(
@@ -390,6 +394,7 @@ export class AccountSystem {
 				doc.finished = false
 				doc.public = pub
 			},
+			markCacheDirty,
 		)
 
 		return {
@@ -406,13 +411,13 @@ export class AccountSystem {
 		}
 	}
 
-	async finishUpload (location: Uint8Array): Promise<void> {
+	async finishUpload (location: Uint8Array, markCacheDirty = false): Promise<void> {
 		// console.log("finishUpload(", location, ")")
 
-		return await this._m.runExclusive(() => this._finishUpload(location))
+		return await this._m.runExclusive(() => this._finishUpload(location, markCacheDirty))
 	}
 
-	async _finishUpload (location: Uint8Array): Promise<void> {
+	async _finishUpload (location: Uint8Array, markCacheDirty = false): Promise<void> {
 		// console.log("_finishUpload(", location, ")")
 
 		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
@@ -421,6 +426,7 @@ export class AccountSystem {
 			(doc) => {
 				doc.finished = true
 			},
+			markCacheDirty,
 		)
 
 		await this.config.metadataAccess.change<FilesIndex>(
@@ -438,21 +444,22 @@ export class AccountSystem {
 
 				fileEntry.finished = true
 			},
+			markCacheDirty,
 		)
 	}
 
-	async renameFile (location: Uint8Array, newName: string): Promise<FileMetadata> {
+	async renameFile (location: Uint8Array, newName: string, markCacheDirty = false): Promise<FileMetadata> {
 		// console.log("renameFile(", location, newName, ")")
 
-		return await this._m.runExclusive(() => this._renameFile(location, newName))
+		return await this._m.runExclusive(() => this._renameFile(location, newName, markCacheDirty))
 	}
 
-	async _renameFile (location: Uint8Array, newName: string): Promise<FileMetadata> {
+	async _renameFile (location: Uint8Array, newName: string, markCacheDirty = false): Promise<FileMetadata> {
 		// console.log("_renameFile(", location, newName, ")")
 
 		validateFilename(newName)
 
-		const fileIndexEntry = await this._getFileIndexEntryByLocation(location)
+		const fileIndexEntry = await this._getFileIndexEntryByLocation(location, markCacheDirty)
 		if (!fileIndexEntry) {
 			throw new AccountSystemNotFoundError("file", bytesToB64(location))
 		}
@@ -463,6 +470,7 @@ export class AccountSystem {
 			(doc) => {
 				doc.name = newName
 			},
+			markCacheDirty,
 		)
 
 		await this.config.metadataAccess.change<FolderMetadata>(
@@ -480,6 +488,7 @@ export class AccountSystem {
 
 				fileEntry.name = newName
 			},
+			markCacheDirty,
 		)
 
 		return {
@@ -496,24 +505,24 @@ export class AccountSystem {
 		}
 	}
 
-	async moveFile (location: Uint8Array, newPath: string): Promise<FileMetadata> {
+	async moveFile (location: Uint8Array, newPath: string, markCacheDirty = false): Promise<FileMetadata> {
 		// console.log("moveFile(", location, newPath, ")")
 
-		return await this._m.runExclusive(() => this._moveFile(location, newPath))
+		return await this._m.runExclusive(() => this._moveFile(location, newPath, markCacheDirty))
 	}
 
-	async _moveFile (location: Uint8Array, newPath: string): Promise<FileMetadata> {
+	async _moveFile (location: Uint8Array, newPath: string, markCacheDirty = false): Promise<FileMetadata> {
 		// console.log("_moveFile(", location, newPath, ")")
 
 		newPath = cleanPath(newPath)
 		validateDirectoryPath(newPath)
 
-		const folder = await this._addFolder(newPath)
+		const folder = await this._addFolder(newPath, markCacheDirty)
 		const folderDerive = folder.location
 
-		const oldFileMeta = await this._getFileMetadata(location)
+		const oldFileMeta = await this._getFileMetadata(location, markCacheDirty)
 
-		const newFolder = await this._addFolder(newPath)
+		const newFolder = await this._addFolder(newPath, markCacheDirty)
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(newFolder.location),
@@ -527,6 +536,7 @@ export class AccountSystem {
 				doc.modified = Date.now()
 				doc.size++
 			},
+			markCacheDirty,
 		)
 
 		await this.config.metadataAccess.change<FolderMetadata>(
@@ -547,6 +557,7 @@ export class AccountSystem {
 				doc.modified = Date.now()
 				doc.size--
 			},
+			markCacheDirty,
 		)
 
 		const newFileMeta = await this.config.metadataAccess.change<FileMetadata>(
@@ -555,6 +566,7 @@ export class AccountSystem {
 			(doc) => {
 				doc.folderDerive = folderDerive
 			},
+			markCacheDirty,
 		)
 
 		return {
@@ -570,13 +582,13 @@ export class AccountSystem {
 			public: !!newFileMeta.public,
 		}
 	}
-	async removeFile (location: Uint8Array) {
+	async removeFile (location: Uint8Array, markCacheDirty = false) {
 		// console.log("removeFile(", location, ")")
 
-		return await this._m.runExclusive(() => this._removeFile(location))
+		return await this._m.runExclusive(() => this._removeFile(location, markCacheDirty))
 	}
 
-	async _removeFile (location: Uint8Array) {
+	async _removeFile (location: Uint8Array, markCacheDirty = false) {
 		// console.log("_removeFile(", location, ")")
 
 		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, "Mark upload deleted", (doc) => {
@@ -587,9 +599,9 @@ export class AccountSystem {
 			}
 
 			fileEntry.deleted = true
-		})
+		}, markCacheDirty)
 
-		const fileMeta = await this._getFileMetadata(location)
+		const fileMeta = await this._getFileMetadata(location, markCacheDirty)
 		await this.config.metadataAccess.delete(this.getFileDerivePath(location))
 
 		await this.config.metadataAccess.change<FolderMetadata>(
@@ -600,6 +612,7 @@ export class AccountSystem {
 
 				doc.files.splice(fileIndex, 1)
 			},
+			markCacheDirty,
 		)
 	}
 
@@ -611,17 +624,17 @@ export class AccountSystem {
 		return this.prefix + "/folder/" + bytesToB64(location)
 	}
 
-	async getFoldersIndex (): Promise<FoldersIndex> {
+	async getFoldersIndex (markCacheDirty = false): Promise<FoldersIndex> {
 		// console.log("getFoldersIndex(", ")")
 
-		return await this._m.runExclusive(() => this._getFoldersIndex())
+		return await this._m.runExclusive(() => this._getFoldersIndex(markCacheDirty))
 	}
 
-	async _getFoldersIndex (): Promise<FoldersIndex> {
+	async _getFoldersIndex (markCacheDirty = false): Promise<FoldersIndex> {
 		// console.log("_getFoldersIndex(", ")")
 
 		const foldersIndex =
-			(await this.config.metadataAccess.get<FoldersIndex>(this.indexes.folders)) ||
+			(await this.config.metadataAccess.get<FoldersIndex>(this.indexes.folders, markCacheDirty)) ||
 			Automerge.from<FoldersIndex>({ folders: [] })
 
 		// TODO: find orphans
@@ -643,19 +656,19 @@ export class AccountSystem {
 		}
 	}
 
-	async getFolderIndexEntryByPath (path: string): Promise<FoldersIndexEntry> {
+	async getFolderIndexEntryByPath (path: string, markCacheDirty = false): Promise<FoldersIndexEntry> {
 		// console.log("getFolderIndexEntryByPath(", path, ")")
 
-		return await this._m.runExclusive(() => this._getFolderIndexEntryByPath(path))
+		return await this._m.runExclusive(() => this._getFolderIndexEntryByPath(path, markCacheDirty))
 	}
 
-	async _getFolderIndexEntryByPath (path: string): Promise<FoldersIndexEntry> {
+	async _getFolderIndexEntryByPath (path: string, markCacheDirty = false): Promise<FoldersIndexEntry> {
 		// console.log("_getFolderIndexEntryByPath(", path, ")")
 
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
-		const foldersIndex = await this._getFoldersIndex()
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
 		const folderEntry = foldersIndex.folders.find((folder) => folder.path == path)
 
 		if (!folderEntry) {
@@ -669,33 +682,33 @@ export class AccountSystem {
 		}
 	}
 
-	async getFoldersInFolderByPath (path: string): Promise<FoldersIndexEntry[]> {
+	async getFoldersInFolderByPath (path: string, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
 		// console.log("getFoldersInFolderByPath(", path, ")")
 
-		return await this._m.runExclusive(() => this._getFoldersInFolderByPath(path))
+		return await this._m.runExclusive(() => this._getFoldersInFolderByPath(path, markCacheDirty))
 	}
 
-	async _getFoldersInFolderByPath (path: string): Promise<FoldersIndexEntry[]> {
+	async _getFoldersInFolderByPath (path: string, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
 		// console.log("_getFoldersInFolderByPath(", path, ")")
 
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
-		const foldersIndex = await this._getFoldersIndex()
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
 
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
-	async getFoldersInFolderByLocation (location: Uint8Array): Promise<FoldersIndexEntry[]> {
+	async getFoldersInFolderByLocation (location: Uint8Array, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
 		// console.log("getFoldersInFolderByLocation(", location, ")")
 
-		return await this._m.runExclusive(() => this._getFoldersInFolderByLocation(location))
+		return await this._m.runExclusive(() => this._getFoldersInFolderByLocation(location, markCacheDirty))
 	}
 
-	async _getFoldersInFolderByLocation (location: Uint8Array): Promise<FoldersIndexEntry[]> {
+	async _getFoldersInFolderByLocation (location: Uint8Array, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
 		// console.log("_getFoldersInFolderByLocation(", location, ")")
 
-		const foldersIndex = await this._getFoldersIndex()
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
 
 		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
 
@@ -708,34 +721,34 @@ export class AccountSystem {
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
-	async getFolderMetadataByPath (path: string): Promise<FolderMetadata> {
+	async getFolderMetadataByPath (path: string, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("getFolderMetadataByPath(", path, ")")
 
-		return await this._m.runExclusive(() => this._getFolderMetadataByPath(path))
+		return await this._m.runExclusive(() => this._getFolderMetadataByPath(path, markCacheDirty))
 	}
 
-	async _getFolderMetadataByPath (path: string): Promise<FolderMetadata> {
+	async _getFolderMetadataByPath (path: string, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("_getFolderMetadataByPath(", path, ")")
 
 		path = cleanPath(path)
 
-		const folderEntry = await this._getFolderIndexEntryByPath(path)
+		const folderEntry = await this._getFolderIndexEntryByPath(path, markCacheDirty)
 
-		return await this._getFolderMetadataByLocation(folderEntry.location)
+		return await this._getFolderMetadataByLocation(folderEntry.location, markCacheDirty)
 	}
 
-	async getFolderMetadataByLocation (location: Uint8Array): Promise<FolderMetadata> {
+	async getFolderMetadataByLocation (location: Uint8Array, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("getFolderMetadataByLocation(", location, ")")
 
-		return await this._m.runExclusive(() => this._getFolderMetadataByLocation(location))
+		return await this._m.runExclusive(() => this._getFolderMetadataByLocation(location, markCacheDirty))
 	}
 
-	async _getFolderMetadataByLocation (location: Uint8Array): Promise<FolderMetadata> {
+	async _getFolderMetadataByLocation (location: Uint8Array, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("_getFolderMetadataByLocation(", location, ")")
 
 		const folderPath = this.getFolderDerivePath(location)
 
-		const doc = await this.config.metadataAccess.get<FolderMetadata>(folderPath)
+		const doc = await this.config.metadataAccess.get<FolderMetadata>(folderPath, markCacheDirty)
 
 		if (!doc) {
 			throw new AccountSystemNotFoundError("folder", folderPath)
@@ -755,27 +768,27 @@ export class AccountSystem {
 		}
 	}
 
-	async addFolder (path: string): Promise<FolderMetadata> {
+	async addFolder (path: string, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("addFolder(", path, ")")
 
 		// adding folders can result in duplication
 		// marking the cache dirty reduces this risk
 		await this.config.metadataAccess.markCacheDirty(this.indexes.folders)
 
-		return await this._m.runExclusive(() => this._addFolder(path))
+		return await this._m.runExclusive(() => this._addFolder(path, markCacheDirty))
 	}
 
-	async _addFolder (path: string): Promise<FolderMetadata> {
+	async _addFolder (path: string, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("_addFolder(", path, ")")
 
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 
 		if (path != "/") {
-			await this._addFolder(posix.dirname(path))
+			await this._addFolder(posix.dirname(path), markCacheDirty)
 		}
 
-		let foldersIndexDoc = await this._getFoldersIndex()
+		let foldersIndexDoc = await this._getFoldersIndex(markCacheDirty)
 
 		const dup = foldersIndexDoc.folders.find((entry) => entry.path == path)
 
@@ -793,7 +806,7 @@ export class AccountSystem {
 				location: location,
 				path,
 			})
-		})
+		}, markCacheDirty)
 
 		const doc = await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(location),
@@ -807,6 +820,7 @@ export class AccountSystem {
 				doc.uploaded = Date.now()
 				doc.files = []
 			},
+			markCacheDirty,
 		)
 
 		return {
@@ -823,29 +837,29 @@ export class AccountSystem {
 		}
 	}
 
-	async renameFolder (path: string, newName: string): Promise<FolderMetadata> {
+	async renameFolder (path: string, newName: string, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("renameFolder(", path, newName, ")")
 
-		return await this._m.runExclusive(() => this._renameFolder(path, newName))
+		return await this._m.runExclusive(() => this._renameFolder(path, newName, markCacheDirty))
 	}
 
-	async _renameFolder (path: string, newName: string): Promise<FolderMetadata> {
+	async _renameFolder (path: string, newName: string, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("_renameFolder(", path, newName, ")")
 
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 		validateFilename(newName)
 
-		return await this._moveFolder(path, posix.join(posix.dirname(path), newName))
+		return await this._moveFolder(path, posix.join(posix.dirname(path), newName), markCacheDirty)
 	}
 
-	async moveFolder (oldPath: string, newPath: string): Promise<FolderMetadata> {
+	async moveFolder (oldPath: string, newPath: string, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("moveFolder(", oldPath, newPath, ")")
 
-		return await this._m.runExclusive(() => this._moveFolder(oldPath, newPath))
+		return await this._m.runExclusive(() => this._moveFolder(oldPath, newPath, markCacheDirty))
 	}
 
-	async _moveFolder (oldPath: string, newPath: string): Promise<FolderMetadata> {
+	async _moveFolder (oldPath: string, newPath: string, markCacheDirty = false): Promise<FolderMetadata> {
 		// console.log("_moveFolder(", oldPath, newPath, ")")
 
 		oldPath = cleanPath(oldPath)
@@ -855,12 +869,12 @@ export class AccountSystem {
 
 		const op = posix.dirname(oldPath) == posix.dirname(newPath) ? "Rename" : "Move"
 
-		const newFolder = await this._getFolderIndexEntryByPath(newPath).catch(() => {})
+		const newFolder = await this._getFolderIndexEntryByPath(newPath, markCacheDirty).catch(() => {})
 		if (newFolder) {
 			throw new AccountSystemAlreadyExistsError("folder", newPath)
 		}
 
-		const folderEntry = await this._getFolderIndexEntryByPath(oldPath)
+		const folderEntry = await this._getFolderIndexEntryByPath(oldPath, markCacheDirty)
 		if (!folderEntry) {
 			throw new AccountSystemNotFoundError("folder", oldPath)
 		}
@@ -868,7 +882,7 @@ export class AccountSystem {
 		// moving folders can result in duplication
 		// marking the cache dirty reduces this risk
 		await this.config.metadataAccess.markCacheDirty(this.indexes.folders)
-		const foldersIndex = await this._getFoldersIndex()
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
 
 		await this.config.metadataAccess.change<FoldersIndex>(this.indexes.folders, `${op} folder`, (doc) => {
 			const subs = doc.folders.filter((folderEntry) => posix.relative(oldPath, folderEntry.path).indexOf("../") != 0)
@@ -876,7 +890,7 @@ export class AccountSystem {
 			for (let folderEntry of subs) {
 				folderEntry.path = posix.join(newPath, posix.relative(oldPath, folderEntry.path))
 			}
-		})
+		}, markCacheDirty)
 
 		const subs = foldersIndex.folders.filter((folderEntry) => {
 			const rel = posix.relative(oldPath, folderEntry.path)
@@ -891,6 +905,7 @@ export class AccountSystem {
 				(doc) => {
 					doc.path = posix.join(newPath, posix.relative(oldPath, folderEntry.path))
 				},
+				markCacheDirty,
 			)
 		}
 
@@ -901,6 +916,7 @@ export class AccountSystem {
 				doc.name = posix.basename(newPath)
 				doc.path = newPath
 			},
+			markCacheDirty,
 		)
 
 		return {
@@ -917,38 +933,38 @@ export class AccountSystem {
 		}
 	}
 
-	async removeFolderByPath (path: string): Promise<void> {
+	async removeFolderByPath (path: string, markCacheDirty = false): Promise<void> {
 		// console.log("removeFolderByPath(", path, ")")
 
-		return await this._m.runExclusive(() => this._removeFolderByPath(path))
+		return await this._m.runExclusive(() => this._removeFolderByPath(path, markCacheDirty))
 	}
 
-	async _removeFolderByPath (path: string): Promise<void> {
+	async _removeFolderByPath (path: string, markCacheDirty = false): Promise<void> {
 		// console.log("_removeFolderByPath(", path, ")")
 
 		path = cleanPath(path)
 
-		const folderEntry = await this._getFolderIndexEntryByPath(path)
+		const folderEntry = await this._getFolderIndexEntryByPath(path, markCacheDirty)
 
-		return await this._removeFolderByLocation(folderEntry.location)
+		return await this._removeFolderByLocation(folderEntry.location, markCacheDirty)
 	}
 
-	async removeFolderByLocation (location: Uint8Array): Promise<void> {
+	async removeFolderByLocation (location: Uint8Array, markCacheDirty = false): Promise<void> {
 		// console.log("removeFolderByLocation(", location, ")")
 
-		return await this._m.runExclusive(() => this._removeFolderByLocation(location))
+		return await this._m.runExclusive(() => this._removeFolderByLocation(location, markCacheDirty))
 	}
 
-	async _removeFolderByLocation (location: Uint8Array): Promise<void> {
+	async _removeFolderByLocation (location: Uint8Array, markCacheDirty = false): Promise<void> {
 		// console.log("_removeFolderByLocation(", location, ")")
 
-		const folderMeta = await this._getFolderMetadataByLocation(location)
+		const folderMeta = await this._getFolderMetadataByLocation(location, markCacheDirty)
 
 		if (folderMeta.files.length) {
 			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
 		}
 
-		const childFolders = await this._getFoldersInFolderByLocation(location)
+		const childFolders = await this._getFoldersInFolderByLocation(location, markCacheDirty)
 
 		if (childFolders.length) {
 			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
@@ -964,6 +980,7 @@ export class AccountSystem {
 
 				doc.folders.splice(folderIndex, 1)
 			},
+			markCacheDirty,
 		)
 	}
 
@@ -979,17 +996,17 @@ export class AccountSystem {
 		return new Uint8Array(Array.from(meta.locationKey).concat(Array.from(meta.encryptionKey)))
 	}
 
-	async getShareIndex (): Promise<ShareIndex> {
+	async getShareIndex (markCacheDirty = false): Promise<ShareIndex> {
 		// console.log("getShareIndex(", ")")
 
-		return await this._m.runExclusive(() => this._getShareIndex())
+		return await this._m.runExclusive(() => this._getShareIndex(markCacheDirty))
 	}
 
-	async _getShareIndex (): Promise<ShareIndex> {
+	async _getShareIndex (markCacheDirty = false): Promise<ShareIndex> {
 		// console.log("_getShareIndex(", ")")
 
 		const sharedIndex =
-			(await this.config.metadataAccess.get<ShareIndex>(this.indexes.share)) ||
+			(await this.config.metadataAccess.get<ShareIndex>(this.indexes.share, markCacheDirty)) ||
 			Automerge.from<ShareIndex>({ shared: [] })
 
 		// TODO: find orphans
@@ -1002,19 +1019,19 @@ export class AccountSystem {
 		}
 	}
 
-	async share (filesInit: ShareFileMetadataInit[]): Promise<ShareMetadata> {
+	async share (filesInit: ShareFileMetadataInit[], markCacheDirty = false): Promise<ShareMetadata> {
 		// console.log("share(", filesInit, ")")
 
-		return await this._m.runExclusive(() => this._share(filesInit))
+		return await this._m.runExclusive(() => this._share(filesInit, markCacheDirty))
 	}
 
-	async _share (filesInit: ShareFileMetadataInit[]): Promise<ShareMetadata> {
+	async _share (filesInit: ShareFileMetadataInit[], markCacheDirty = false): Promise<ShareMetadata> {
 		// console.log("_share(", filesInit, ")")
 
 		const files = await Promise.all(
 			filesInit.map(
 				async (fileInit): Promise<ShareFileMetadata> => {
-					const meta = await this._getFileMetadata(fileInit.location)
+					const meta = await this._getFileMetadata(fileInit.location, markCacheDirty)
 
 					return {
 						handle: meta.handle,
@@ -1042,7 +1059,7 @@ export class AccountSystem {
 				locationKey,
 				encryptionKey,
 			})
-		})
+		}, markCacheDirty)
 
 		const shareMeta = await this.config.metadataAccess.changePublic<ShareMetadata>(
 			locationKey,
@@ -1054,6 +1071,7 @@ export class AccountSystem {
 				doc.files = files
 			},
 			encryptionKey,
+			markCacheDirty,
 		)
 
 		return {
@@ -1074,13 +1092,13 @@ export class AccountSystem {
 		}
 	}
 
-	async getShared (handle: Uint8Array): Promise<ShareMetadata> {
+	async getShared (handle: Uint8Array, markCacheDirty = false): Promise<ShareMetadata> {
 		// console.log("getShared(", handle, ")")
 
 		const locationKey = handle.slice(0, 32)
 		const encryptionKey = handle.slice(32)
 
-		const shareMeta = await this.config.metadataAccess.getPublic<ShareMetadata>(locationKey, encryptionKey)
+		const shareMeta = await this.config.metadataAccess.getPublic<ShareMetadata>(locationKey, encryptionKey, markCacheDirty)
 
 		if (!shareMeta) {
 			throw new AccountSystemNotFoundError("shared", bytesToB64(handle))

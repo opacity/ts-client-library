@@ -136,13 +136,14 @@ export class MetadataAccess {
 		path: string,
 		description: string,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
+		markCacheDirty = false,
 	): Promise<Automerge.Doc<T>> {
 		// console.log("change(", path, description, fn, ")")
 
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
-		return await this._change<T>(priv, description, fn, false)
+		return await this._change<T>(priv, description, fn, false, undefined, markCacheDirty)
 	}
 
 	async changePublic<T = unknown> (
@@ -150,10 +151,11 @@ export class MetadataAccess {
 		description: string,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 		encryptKey: Uint8Array,
+		markCacheDirty = false,
 	): Promise<Automerge.Doc<T>> {
 		// console.log("changePublic(", priv, description, fn, encryptKey, ")")
 
-		return await this._change<T>(priv, description, fn, true, encryptKey)
+		return await this._change<T>(priv, description, fn, true, encryptKey, markCacheDirty)
 	}
 
 	async _change<T = unknown> (
@@ -162,6 +164,7 @@ export class MetadataAccess {
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 		isPublic: boolean,
 		encryptKey?: Uint8Array,
+		markCacheDirty = false,
 	): Promise<Automerge.Doc<T>> {
 		// console.log("_change(", priv, description, fn, isPublic, encryptKey, ")")
 
@@ -169,7 +172,7 @@ export class MetadataAccess {
 		const pubString = bytesToB64(pub)
 
 		// sync
-		const curDoc = (await this._get<T>(priv)) || Automerge.init<T>()
+		const curDoc = (await this._get<T>(priv, undefined, markCacheDirty)) || Automerge.init<T>()
 		this.dags[pubString] = this.dags[pubString] || new DAG()
 		const dag = this.dags[pubString]
 
@@ -219,16 +222,16 @@ export class MetadataAccess {
 		return newDoc
 	}
 
-	async get<T> (path: string): Promise<Automerge.Doc<T> | undefined> {
+	async get<T> (path: string, markCacheDirty = false): Promise<Automerge.Doc<T> | undefined> {
 		// console.log("get(", path, ")")
 
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
-		return await this._get<T>(priv)
+		return await this._get<T>(priv, undefined, markCacheDirty)
 	}
 
-	async _get<T> (priv: Uint8Array, decryptKey?: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
+	async _get<T> (priv: Uint8Array, decryptKey?: Uint8Array, markCacheDirty = false): Promise<Automerge.Doc<T> | undefined> {
 		// console.log("_get(", priv, decryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
@@ -236,16 +239,14 @@ export class MetadataAccess {
 
 		const cached = this.cache[pubString]
 
-		if (!cached || cached.dirty == true || Date.now() - cached.lastAccess > 60 * 1000) {
+		if (markCacheDirty || !cached || cached.dirty == true) {
 			console.warn(
 				"Cache: cache not used for",
 				pubString,
 				"because",
 				!cached
 					? "item was not found in cache"
-					: cached.dirty
-						? "cache entry was marked dirty"
-						: "cache was expired " + (Date.now() - cached.lastAccess),
+					: "cache entry was marked dirty"
 			)
 			const payload = await getPayload<MetadataGetPayload>({
 				crypto: this.config.crypto,
@@ -296,11 +297,11 @@ export class MetadataAccess {
 		return doc
 	}
 
-	async getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
+	async getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array, markCacheDirty = false): Promise<Automerge.Doc<T> | undefined> {
 		return await this._getPublic(priv, decryptKey)
 	}
 
-	async _getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array): Promise<Automerge.Doc<T> | undefined> {
+	async _getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array, markCacheDirty = false): Promise<Automerge.Doc<T> | undefined> {
 		// console.log("_getPublic", priv, decryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
@@ -308,7 +309,16 @@ export class MetadataAccess {
 
 		const cached = this.cache[pubString]
 
-		if (!cached || cached.dirty == true || Date.now() - cached.lastAccess > 60 * 1000) {
+		if (markCacheDirty || !cached || cached.dirty == true) {
+			console.warn(
+				"Cache: cache not used for",
+				pubString,
+				"because",
+				!cached
+					? "item was not found in cache"
+					: "cache entry was marked dirty"
+			)
+
 			const res = await this.config.net.POST<MetadataGetRes>(
 				this.config.metadataNode + "/api/v2/metadata/get-public",
 				undefined,
@@ -325,7 +335,7 @@ export class MetadataAccess {
 			this.dags[pubString] = dag
 		}
 		else {
-			// console.info("Using cached value for", pubString)
+			console.info("Cache: using cached value for", pubString)
 
 			return cached.doc as Automerge.Doc<T>
 		}
