@@ -4,7 +4,6 @@ import { extractPromise } from "@opacity/util/src/promise"
 import { FileSystemObject } from "./filesystem-object"
 import { Download } from "./download"
 import { Upload } from "./upload"
-import { FileSystemObjectEvents, UploadEvents, UploadMetadataEvent } from "./events"
 
 export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Upload) => {
 	const [fileMetadata, resolveFileMetadata] = extractPromise<FileMetadata>()
@@ -22,7 +21,9 @@ export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Uploa
 	}
 
 	u._afterUpload = async () => {
-		await accountSystem.finishUpload((await fileMetadata).location)
+		const file = await fileMetadata
+
+		await accountSystem.finishUpload(file.location)
 	}
 }
 

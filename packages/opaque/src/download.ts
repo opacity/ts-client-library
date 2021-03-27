@@ -405,10 +405,11 @@ export class Download extends EventTarget implements IDownloadEvents {
 					},
 				)
 
-				await Promise.all([netQueue.waitForClose(), decryptQueue.waitForClose()])
+				await netQueue.waitForClose()
+				await decryptQueue.waitForClose()
 
 				if (d._afterDownload) {
-					await d._afterDownload(d)
+					await d._afterDownload(d).catch(d._reject)
 				}
 
 				d._resolve()
