@@ -1,8 +1,7 @@
 import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { getPayload } from "@opacity/util/src/payload"
-import { extractPromise } from "@opacity/util/src/promise"
-import { FileSystemObjectDeleteEvent, FileSystemObjectEvents } from "./events"
+import { FileSystemObjectDeleteEvent } from "./events"
 
 export class DeletionError extends Error {
 	constructor (location: string, err: string) {
@@ -22,7 +21,8 @@ export class FileSystemObject extends EventTarget {
 
 	config: FileSystemObjectConfig
 
-	_deleter = extractPromise()
+	_beforeDelete?: (o: FileSystemObject) => Promise<void>
+	_afterDelete?: (o: FileSystemObject) => Promise<void>
 
 	constructor (handle: Uint8Array, config: FileSystemObjectConfig) {
 		super()
@@ -37,6 +37,10 @@ export class FileSystemObject extends EventTarget {
 			console.warn("filesystem object already deleted")
 
 			return
+		}
+
+		if (this._beforeDelete) {
+			await this._beforeDelete(this)
 		}
 
 		this.dispatchEvent(new FileSystemObjectDeleteEvent({}))
@@ -59,11 +63,9 @@ export class FileSystemObject extends EventTarget {
 			throw new DeletionError(bytesToHex(location), res.data)
 		}
 
-		// resolve
-		this._deleter[1]()
-
-		// promise
-		await this._deleter[0]
+		if (this._afterDelete) {
+			await this._afterDelete(this)
+		}
 
 		// clear sensitive data
 		delete this._handle

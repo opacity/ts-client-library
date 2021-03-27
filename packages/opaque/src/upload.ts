@@ -126,6 +126,9 @@ export class Upload extends EventTarget implements IUploadEvents {
 		pauseDuration: 0,
 	}
 
+	_beforeUpload?: (u: Upload) => Promise<void>
+	_afterUpload?: (u: Upload) => Promise<void>
+
 	pause () {
 		const t = Date.now()
 
@@ -227,6 +230,10 @@ export class Upload extends EventTarget implements IUploadEvents {
 		this.dispatchEvent(new UploadMetadataEvent({ metadata: this._metadata }))
 
 		const u = this
+
+		if (this._beforeUpload) {
+			await this._beforeUpload(u).catch(u._reject)
+		}
 
 		const encryptedMeta = await u.config.crypto.encrypt(
 			u._key!,
@@ -418,6 +425,10 @@ export class Upload extends EventTarget implements IUploadEvents {
 
 			await encryptQueue.waitForClose()
 			await netQueue.waitForClose()
+
+			if (this._afterUpload) {
+				await this._afterUpload(u).catch(u._reject)
+			}
 
 			u._resolve()
 		})()

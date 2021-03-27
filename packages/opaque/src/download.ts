@@ -100,6 +100,9 @@ export class Download extends EventTarget implements IDownloadEvents {
 		pauseDuration: 0,
 	}
 
+	_beforeDownload?: (d: Download) => Promise<void>
+	_afterDownload?: (d: Download) => Promise<void>
+
 	pause () {
 		const t = Date.now()
 
@@ -243,6 +246,10 @@ export class Download extends EventTarget implements IDownloadEvents {
 		}
 
 		const d = this
+
+		if (this._beforeDownload) {
+			await this._beforeDownload(d)
+		}
 
 		const downloadUrl = await d.downloadUrl().catch(d._reject)
 		if (!downloadUrl) {
@@ -398,10 +405,14 @@ export class Download extends EventTarget implements IDownloadEvents {
 					},
 				)
 
-				Promise.all([netQueue.waitForClose(), decryptQueue.waitForClose()]).then(() => {
-					d._resolve()
-					controller.close()
-				})
+				await Promise.all([netQueue.waitForClose(), decryptQueue.waitForClose()])
+
+				if (d._afterDownload) {
+					await d._afterDownload(d)
+				}
+
+				d._resolve()
+				controller.close()
 			},
 			cancel () {
 				d._cancelled = true
