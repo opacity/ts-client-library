@@ -8,9 +8,9 @@
 
 [`@opacity/middleware`](./packages/middleware) - Middleware specification
 
-[`@opacity/middleware`](./packages/middleware-stub) - Middleware stubs for testing
+[`@opacity/middleware-stub`](./packages/middleware-stub) - Middleware stubs for testing
 
-[`@opacity/middleware`](./packages/middleware-web) - Cryptography and network for the web
+[`@opacity/middleware-web`](./packages/middleware-web) - Cryptography and network for the web
 
 [`@opacity/opaque`](./packages/opaque) - Uploads and downloads
 
