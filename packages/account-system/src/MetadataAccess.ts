@@ -231,7 +231,11 @@ export class MetadataAccess {
 		return await this._get<T>(priv, undefined, markCacheDirty)
 	}
 
-	async _get<T> (priv: Uint8Array, decryptKey?: Uint8Array, markCacheDirty = false): Promise<Automerge.Doc<T> | undefined> {
+	async _get<T> (
+		priv: Uint8Array,
+		decryptKey?: Uint8Array,
+		markCacheDirty = false,
+	): Promise<Automerge.Doc<T> | undefined> {
 		// console.log("_get(", priv, decryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
@@ -244,9 +248,7 @@ export class MetadataAccess {
 				"Cache: cache not used for",
 				pubString,
 				"because",
-				!cached
-					? "item was not found in cache"
-					: "cache entry was marked dirty"
+				!cached ? "item was not found in cache" : "cache entry was marked dirty",
 			)
 			const payload = await getPayload<MetadataGetPayload>({
 				crypto: this.config.crypto,
@@ -297,11 +299,19 @@ export class MetadataAccess {
 		return doc
 	}
 
-	async getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array, markCacheDirty = false): Promise<Automerge.Doc<T> | undefined> {
+	async getPublic<T> (
+		priv: Uint8Array,
+		decryptKey: Uint8Array,
+		markCacheDirty = false,
+	): Promise<Automerge.Doc<T> | undefined> {
 		return await this._getPublic(priv, decryptKey)
 	}
 
-	async _getPublic<T> (priv: Uint8Array, decryptKey: Uint8Array, markCacheDirty = false): Promise<Automerge.Doc<T> | undefined> {
+	async _getPublic<T> (
+		priv: Uint8Array,
+		decryptKey: Uint8Array,
+		markCacheDirty = false,
+	): Promise<Automerge.Doc<T> | undefined> {
 		// console.log("_getPublic", priv, decryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
@@ -314,9 +324,7 @@ export class MetadataAccess {
 				"Cache: cache not used for",
 				pubString,
 				"because",
-				!cached
-					? "item was not found in cache"
-					: "cache entry was marked dirty"
+				!cached ? "item was not found in cache" : "cache entry was marked dirty",
 			)
 
 			const res = await this.config.net.POST<MetadataGetRes>(

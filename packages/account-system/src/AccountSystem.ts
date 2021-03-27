@@ -316,7 +316,7 @@ export class AccountSystem {
 		filename: string,
 		meta: FileCreationMetadata,
 		pub: boolean,
-		markCacheDirty = false
+		markCacheDirty = false,
 	): Promise<FileMetadata> {
 		// console.log("addUpload(", handle, path, filename, meta, pub, ")")
 
@@ -329,7 +329,7 @@ export class AccountSystem {
 		filename: string,
 		meta: FileCreationMetadata,
 		pub: boolean,
-		markCacheDirty = false
+		markCacheDirty = false,
 	): Promise<FileMetadata> {
 		// console.log("_addUpload(", handle, path, filename, meta, pub, ")")
 
@@ -591,15 +591,20 @@ export class AccountSystem {
 	async _removeFile (location: Uint8Array, markCacheDirty = false) {
 		// console.log("_removeFile(", location, ")")
 
-		await this.config.metadataAccess.change<FilesIndex>(this.indexes.files, "Mark upload deleted", (doc) => {
-			const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+		await this.config.metadataAccess.change<FilesIndex>(
+			this.indexes.files,
+			"Mark upload deleted",
+			(doc) => {
+				const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
-			if (!fileEntry) {
-				throw new AccountSystemNotFoundError("file entry", bytesToB64(location))
-			}
+				if (!fileEntry) {
+					throw new AccountSystemNotFoundError("file entry", bytesToB64(location))
+				}
 
-			fileEntry.deleted = true
-		}, markCacheDirty)
+				fileEntry.deleted = true
+			},
+			markCacheDirty,
+		)
 
 		const fileMeta = await this._getFileMetadata(location, markCacheDirty)
 		await this.config.metadataAccess.delete(this.getFileDerivePath(location))
@@ -798,15 +803,20 @@ export class AccountSystem {
 
 		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
 
-		await this.config.metadataAccess.change<FoldersIndex>(this.indexes.folders, "Add folder to index", (doc) => {
-			if (!doc.folders) {
-				doc.folders = []
-			}
-			doc.folders.push({
-				location: location,
-				path,
-			})
-		}, markCacheDirty)
+		await this.config.metadataAccess.change<FoldersIndex>(
+			this.indexes.folders,
+			"Add folder to index",
+			(doc) => {
+				if (!doc.folders) {
+					doc.folders = []
+				}
+				doc.folders.push({
+					location: location,
+					path,
+				})
+			},
+			markCacheDirty,
+		)
 
 		const doc = await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(location),
@@ -884,13 +894,18 @@ export class AccountSystem {
 		await this.config.metadataAccess.markCacheDirty(this.indexes.folders)
 		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
 
-		await this.config.metadataAccess.change<FoldersIndex>(this.indexes.folders, `${op} folder`, (doc) => {
-			const subs = doc.folders.filter((folderEntry) => posix.relative(oldPath, folderEntry.path).indexOf("../") != 0)
+		await this.config.metadataAccess.change<FoldersIndex>(
+			this.indexes.folders,
+			`${op} folder`,
+			(doc) => {
+				const subs = doc.folders.filter((folderEntry) => posix.relative(oldPath, folderEntry.path).indexOf("../") != 0)
 
-			for (let folderEntry of subs) {
-				folderEntry.path = posix.join(newPath, posix.relative(oldPath, folderEntry.path))
-			}
-		}, markCacheDirty)
+				for (let folderEntry of subs) {
+					folderEntry.path = posix.join(newPath, posix.relative(oldPath, folderEntry.path))
+				}
+			},
+			markCacheDirty,
+		)
 
 		const subs = foldersIndex.folders.filter((folderEntry) => {
 			const rel = posix.relative(oldPath, folderEntry.path)
@@ -1051,15 +1066,20 @@ export class AccountSystem {
 		const locationKey = await entropyToKey(await this.config.metadataAccess.config.crypto.getRandomValues(32))
 		const encryptionKey = await this.config.metadataAccess.config.crypto.getRandomValues(32)
 
-		await this.config.metadataAccess.change<ShareIndex>(this.indexes.share, "Share files", (doc) => {
-			if (!doc.shared) {
-				doc.shared = []
-			}
-			doc.shared.push({
-				locationKey,
-				encryptionKey,
-			})
-		}, markCacheDirty)
+		await this.config.metadataAccess.change<ShareIndex>(
+			this.indexes.share,
+			"Share files",
+			(doc) => {
+				if (!doc.shared) {
+					doc.shared = []
+				}
+				doc.shared.push({
+					locationKey,
+					encryptionKey,
+				})
+			},
+			markCacheDirty,
+		)
 
 		const shareMeta = await this.config.metadataAccess.changePublic<ShareMetadata>(
 			locationKey,
@@ -1098,7 +1118,11 @@ export class AccountSystem {
 		const locationKey = handle.slice(0, 32)
 		const encryptionKey = handle.slice(32)
 
-		const shareMeta = await this.config.metadataAccess.getPublic<ShareMetadata>(locationKey, encryptionKey, markCacheDirty)
+		const shareMeta = await this.config.metadataAccess.getPublic<ShareMetadata>(
+			locationKey,
+			encryptionKey,
+			markCacheDirty,
+		)
 
 		if (!shareMeta) {
 			throw new AccountSystemNotFoundError("shared", bytesToB64(handle))
