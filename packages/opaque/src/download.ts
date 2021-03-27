@@ -405,15 +405,15 @@ export class Download extends EventTarget implements IDownloadEvents {
 					},
 				)
 
-				await netQueue.waitForClose()
-				await decryptQueue.waitForClose()
+				// the start function is blocking for pulls so this must not be awaited
+				Promise.all([netQueue.waitForClose(), decryptQueue.waitForClose()]).then(async () => {
+					if (d._afterDownload) {
+						await d._afterDownload(d).catch(d._reject)
+					}
 
-				if (d._afterDownload) {
-					await d._afterDownload(d).catch(d._reject)
-				}
-
-				d._resolve()
-				controller.close()
+					d._resolve()
+					controller.close()
+				})
 			},
 			cancel () {
 				d._cancelled = true
