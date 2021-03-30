@@ -6,7 +6,7 @@
 export type FileMeta = {
 	// name?: string
 	size: number
-	dateModified: number
+	lastModified: number
 	type: string
 	// p?: FileMetaOptions
 }

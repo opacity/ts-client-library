@@ -1,4 +1,5 @@
 import { Mutex } from "async-mutex"
+
 import { extractPromise } from "./promise"
 
 export type OQWorkFn<S> = (n: number) => Promise<S> | S | void

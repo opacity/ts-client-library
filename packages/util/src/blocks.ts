@@ -3,11 +3,11 @@ export const blockOverhead = 32
 export const blockSizeOnFS = blockSize + blockOverhead
 
 export const numberOfBlocks = (size: number) => {
-	return Math.floor((size - 1) / blockSize) + 1
+	return Math.ceil(size / blockSize)
 }
 
 export const numberOfBlocksOnFS = (sizeOnFS: number) => {
-	return Math.floor((sizeOnFS - 1) / blockSizeOnFS) + 1
+	return Math.ceil(sizeOnFS / blockSizeOnFS)
 }
 
 export const sizeOnFS = (size: number) => {

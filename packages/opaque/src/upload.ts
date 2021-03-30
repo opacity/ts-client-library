@@ -1,11 +1,9 @@
-import { TransformStream, WritableStream } from "web-streams-polyfill/ponyfill"
-
-import { blockSize, blockSizeOnFS, numberOfBlocks, sizeOnFS } from "../../util/src/blocks"
-import { bytesToHex } from "../../util/src/hex"
-import { CryptoMiddleware, NetworkMiddleware } from "../../middleware/src/middleware"
-import { extractPromise } from "../../util/src/promise"
+import { blockSize, blockSizeOnFS, numberOfBlocks, sizeOnFS } from "@opacity/util/src/blocks"
+import { bytesToHex } from "@opacity/util/src/hex"
+import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
+import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "./filemeta"
-import { getPayload, getPayloadFD } from "../../util/src/payload"
+import { getPayload, getPayloadFD } from "@opacity/util/src/payload"
 import {
 	IUploadEvents,
 	UploadBlockStartedEvent,
@@ -17,21 +15,20 @@ import {
 	UploadProgressEvent,
 	UploadStartedEvent,
 } from "./events"
-import { numberOfPartsOnFS, partSize } from "../../util/src/parts"
-import { OQ } from "../../util/src/oqueue"
-import { Retry } from "../../util/src/retry"
-import { Uint8ArrayChunkStream } from "../../util/src/streams"
+import { numberOfPartsOnFS, partSize } from "@opacity/util/src/parts"
+import { OQ } from "@opacity/util/src/oqueue"
+import { Retry } from "@opacity/util/src/retry"
+import { ReadableStream, TransformStream, WritableStream, Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 
 export type UploadConfig = {
 	storageNode: string
-	metadataNode: string
 
 	crypto: CryptoMiddleware
-	network: NetworkMiddleware
+	net: NetworkMiddleware
 
-	queueSize: {
-		encrypt: number
-		net: number
+	queueSize?: {
+		encrypt?: number
+		net?: number
 	}
 }
 
@@ -109,8 +106,6 @@ export class Upload extends EventTarget implements IUploadEvents {
 		return this._sizeOnFS
 	}
 
-	_progress = { network: 0, decrypt: 0 }
-
 	_name: string
 	_path: string
 	_metadata: FileMeta
@@ -130,6 +125,9 @@ export class Upload extends EventTarget implements IUploadEvents {
 		end: undefined,
 		pauseDuration: 0,
 	}
+
+	_beforeUpload?: (u: Upload) => Promise<void>
+	_afterUpload?: (u: Upload) => Promise<void>
 
 	pause () {
 		const t = Date.now()
@@ -153,6 +151,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 		super()
 
 		this.config = config
+		this.config.queueSize = this.config.queueSize || {}
 		this.config.queueSize.encrypt = this.config.queueSize.encrypt || 3
 		this.config.queueSize.net = this.config.queueSize.net || 1
 
@@ -215,7 +214,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 		this._started = true
 		this._timestamps.start = Date.now()
 
-		const ping = await this.config.network
+		const ping = await this.config.net
 			.GET(this.config.storageNode + "", undefined, undefined, async (d) =>
 				new TextDecoder("utf8").decode(await new Response(d).arrayBuffer()),
 			)
@@ -232,7 +231,20 @@ export class Upload extends EventTarget implements IUploadEvents {
 
 		const u = this
 
-		const encryptedMeta = await u.config.crypto.encrypt(u._key!, new TextEncoder().encode(JSON.stringify(u._metadata)))
+		if (this._beforeUpload) {
+			await this._beforeUpload(u).catch(u._reject)
+		}
+
+		const encryptedMeta = await u.config.crypto.encrypt(
+			u._key!,
+			new TextEncoder().encode(
+				JSON.stringify({
+					lastModified: u._metadata.lastModified,
+					size: u._metadata.size,
+					type: u._metadata.type,
+				} as FileMeta),
+			),
+		)
 
 		const fd = await getPayloadFD<UploadInitPayload, UploadInitExtraPayload>({
 			crypto: u.config.crypto,
@@ -246,7 +258,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 			},
 		})
 
-		await u.config.network.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(u._reject)
+		await u.config.net.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(u._reject)
 
 		u.dispatchEvent(
 			new UploadStartedEvent({
@@ -256,8 +268,8 @@ export class Upload extends EventTarget implements IUploadEvents {
 			}),
 		)
 
-		const encryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize.net, Number.MAX_SAFE_INTEGER)
-		const netQueue = new OQ<Uint8Array | undefined>(this.config.queueSize.encrypt)
+		const encryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize!.net, Number.MAX_SAFE_INTEGER)
+		const netQueue = new OQ<Uint8Array | undefined>(this.config.queueSize!.encrypt)
 
 		u._encryptQueue = encryptQueue
 		u._netQueue = netQueue
@@ -267,8 +279,8 @@ export class Upload extends EventTarget implements IUploadEvents {
 
 		const partCollector = new Uint8ArrayChunkStream(
 			partSize,
-			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize.encrypt * partSize + 1 }),
-			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize.encrypt * partSize + 1 }),
+			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize!.encrypt! * partSize + 1 }),
+			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize!.encrypt! * partSize + 1 }),
 		)
 
 		u._output = new TransformStream<Uint8Array, Uint8Array>(
@@ -277,8 +289,8 @@ export class Upload extends EventTarget implements IUploadEvents {
 					controller.enqueue(chunk)
 				},
 			},
-			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize.encrypt * partSize + 1 }),
-		)
+			new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize!.encrypt! * partSize + 1 }),
+		) as TransformStream<Uint8Array, Uint8Array>
 
 		u._output.readable.pipeThrough(partCollector).pipeTo(
 			new WritableStream<Uint8Array>({
@@ -345,7 +357,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 										},
 									})
 
-									return await u.config.network.POST(u.config.storageNode + "/api/v1/upload", {}, fd)
+									return await u.config.net.POST(u.config.storageNode + "/api/v1/upload", {}, fd)
 								},
 								{
 									firstTimer: 500,
@@ -379,7 +391,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 				async close () {
 					await encryptQueue.waitForClose()
 				},
-			}),
+			}) as WritableStream<Uint8Array>,
 		)
 		;(async () => {
 			encryptQueue.add(
@@ -401,7 +413,7 @@ export class Upload extends EventTarget implements IUploadEvents {
 						},
 					})
 
-					const res = (await u.config.network
+					const res = (await u.config.net
 						.POST(u.config.storageNode + "/api/v1/upload-status", {}, JSON.stringify(data))
 						.catch(u._reject)) as void
 
@@ -413,6 +425,10 @@ export class Upload extends EventTarget implements IUploadEvents {
 
 			await encryptQueue.waitForClose()
 			await netQueue.waitForClose()
+
+			if (this._afterUpload) {
+				await this._afterUpload(u).catch(u._reject)
+			}
 
 			u._resolve()
 		})()
@@ -426,5 +442,6 @@ export class Upload extends EventTarget implements IUploadEvents {
 
 	async cancel () {
 		this._cancelled = true
+		this._reject()
 	}
 }

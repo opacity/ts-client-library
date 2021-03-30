@@ -1,5 +1,5 @@
 {
-	"name": "@opacity/middleware",
+	"name": "@opacity/middleware-stub",
 	"version": "0.0.38",
 	"description": "> TODO: description",
 	"author": "Connor <13987924+CKH4@users.noreply.github.com>",
@@ -21,5 +21,9 @@
 	"scripts": {
 		"pretty": "prettierx --ignore-path ./config/.prettierxignore --config ./config/.prettierx.config.json --write .",
 		"test": "echo \"Error: run tests from root\" && exit 1"
+	},
+	"dependencies": {
+		"@opacity/middleware": "^0.0.38",
+		"tslib": "^2.1.0"
 	}
 }

@@ -11,7 +11,10 @@ export {
 	DownloadPartStartedEvent,
 	DownloadProgressEvent,
 	DownloadStartedEvent,
+	FileSystemObjectDeleteEvent,
+	FileSystemObjectEvents,
 	IDownloadEvents,
+	IFileSystemObjectEvents,
 	IUploadEvents,
 	UploadBlockFinishedEvent,
 	UploadBlockStartedEvent,
@@ -24,4 +27,8 @@ export {
 	UploadStartedEvent,
 } from "./events"
 
-export { bindDownloadToAccountSystem, bindUploadToAccountSystem } from "./account-system-binding"
+export {
+	bindDeleteToAccountSystem,
+	bindDownloadToAccountSystem,
+	bindUploadToAccountSystem,
+} from "./account-system-binding"

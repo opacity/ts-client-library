@@ -1,29 +1,37 @@
 {
+	"name": "@opacity/account-system",
+	"version": "0.0.38",
+	"description": "> TODO: description",
+	"author": "Connor <13987924+CKH4@users.noreply.github.com>",
+	"homepage": "https://github.com/opacity/ts-client-library#readme",
+	"main": "src/index.ts",
+	"directories": {
+		"lib": "src"
+	},
+	"files": [
+		"src"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/opacity/ts-client-library.git"
+	},
+	"bugs": {
+		"url": "https://github.com/opacity/ts-client-library/issues"
+	},
+	"scripts": {
+		"start": "rm -rf ./.cache && rm -rf ./dist && npx ts-node --project ./config/tsconfig.dev.json fuse.ts",
+		"pretty": "prettierx --ignore-path ./config/.prettierxignore --config ./config/.prettierx.config.json --write .",
+		"test": "echo \"Error: run tests from root\" && exit 1"
+	},
 	"dependencies": {
+		"@opacity/middleware": "^0.0.38",
+		"@opacity/util": "^0.0.38",
+		"async-mutex": "^0.2.6",
 		"automerge": "git+https://github.com/automerge/automerge.git#performance",
 		"buffer": "^6.0.3",
 		"jssha": "^3.2.0",
 		"path-browserify": "^1.0.1",
 		"tslib": "^2.1.0",
 		"util": "^0.12.3"
-	},
-	"devDependencies": {
-		"fuse-box": "^4.0.1-next.2",
-		"git-format-staged": "^2.1.1",
-		"husky": "^5.1.3",
-		"prettierx": "^0.17.0",
-		"testyts": "^1.1.0",
-		"ts-node": "^9.1.1",
-		"typescript": "^4.1.3"
-	},
-	"scripts": {
-		"start": "rm -rf ./.cache && rm -rf ./dist && npx ts-node --project ./config/tsconfig.dev.json fuse.ts",
-		"pretty": "prettierx --ignore-path ./config/.prettierxignore --config ./config/.prettierx.config.json --write .",
-		"test": "testyts --config ./config/testy.json --tsconfig ./config/tsconfig.dev.json"
-	},
-	"husky": {
-		"hooks": {
-			"pre-commit": "git-format-staged -f 'prettierx --config ./config/prettierx.config.json --ignore-unknown --stdin --stdin-filepath \"{}\"' ."
-		}
 	}
 }

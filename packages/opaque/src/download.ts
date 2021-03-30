@@ -1,9 +1,7 @@
-import { ReadableStream, WritableStream, TransformStream } from "web-streams-polyfill/ponyfill"
-
-import { blockSizeOnFS, numberOfBlocks, numberOfBlocksOnFS, sizeOnFS } from "../../util/src/blocks"
-import { blocksPerPart, numberOfPartsOnFS, partSizeOnFS } from "../../util/src/parts"
-import { bytesToHex } from "../../util/src/hex"
-import { CryptoMiddleware, NetworkMiddleware } from "../../middleware/src/middleware"
+import { blockSizeOnFS, numberOfBlocks, numberOfBlocksOnFS, sizeOnFS } from "@opacity/util/src/blocks"
+import { blocksPerPart, numberOfPartsOnFS, partSizeOnFS } from "@opacity/util/src/parts"
+import { bytesToHex } from "@opacity/util/src/hex"
+import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import {
 	DownloadBlockStartedEvent,
 	DownloadBlockFinishedEvent,
@@ -15,23 +13,27 @@ import {
 	DownloadStartedEvent,
 	IDownloadEvents,
 } from "./events"
-import { extractPromise } from "../../util/src/promise"
+import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "./filemeta"
-import { OQ } from "../../util/src/oqueue"
-import { polyfillReadableStream } from "../../util/src/streams"
-import { serializeEncrypted } from "../../util/src/serializeEncrypted"
-import { Uint8ArrayChunkStream } from "../../util/src/streams"
+import { OQ } from "@opacity/util/src/oqueue"
+import {
+	polyfillReadableStreamIfNeeded,
+	ReadableStream,
+	TransformStream,
+	WritableStream,
+} from "@opacity/util/src/streams"
+import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
+import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 
 export type DownloadConfig = {
 	storageNode: string
-	metadataNode: string
 
 	crypto: CryptoMiddleware
-	network: NetworkMiddleware
+	net: NetworkMiddleware
 
-	queueSize: {
-		net: number
-		decrypt: number
+	queueSize?: {
+		net?: number
+		decrypt?: number
 	}
 }
 
@@ -84,8 +86,6 @@ export class Download extends EventTarget implements IDownloadEvents {
 		return this._sizeOnFS
 	}
 
-	_progress = { network: 0, decrypt: 0 }
-
 	_downloadUrl?: string
 	_metadata?: FileMeta
 
@@ -99,6 +99,9 @@ export class Download extends EventTarget implements IDownloadEvents {
 		end: undefined,
 		pauseDuration: 0,
 	}
+
+	_beforeDownload?: (d: Download) => Promise<void>
+	_afterDownload?: (d: Download) => Promise<void>
 
 	pause () {
 		const t = Date.now()
@@ -122,6 +125,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 		super()
 
 		this.config = config
+		this.config.queueSize = this.config.queueSize || {}
 		this.config.queueSize.net = this.config.queueSize.net || 3
 		this.config.queueSize.decrypt = this.config.queueSize.decrypt || blocksPerPart
 
@@ -160,7 +164,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 
 		const d = this
 
-		const downloadUrlRes = await d.config.network
+		const downloadUrlRes = await d.config.net
 			.POST(
 				d.config.storageNode + "/api/v1/download",
 				undefined,
@@ -191,7 +195,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 			await this.downloadUrl()
 		}
 
-		const metadataRes = await d.config.network
+		const metadataRes = await d.config.net
 			.GET(
 				this._downloadUrl + "/metadata",
 				undefined,
@@ -211,7 +215,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 
 		const metadata = metadataRes.data
 		// old uploads will not have this defined
-		metadata.dateModified = metadata.dateModified || Date.now()
+		metadata.lastModified = metadata.lastModified || Date.now()
 		d._metadata = metadata
 		this.dispatchEvent(new DownloadMetadataEvent({ metadata }))
 
@@ -230,7 +234,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 		this._started = true
 		this._timestamps.start = Date.now()
 
-		const ping = await this.config.network
+		const ping = await this.config.net
 			.GET(this.config.storageNode + "", undefined, undefined, async (d) =>
 				new TextDecoder("utf8").decode(await new Response(d).arrayBuffer()),
 			)
@@ -242,6 +246,10 @@ export class Download extends EventTarget implements IDownloadEvents {
 		}
 
 		const d = this
+
+		if (this._beforeDownload) {
+			await this._beforeDownload(d)
+		}
 
 		const downloadUrl = await d.downloadUrl().catch(d._reject)
 		if (!downloadUrl) {
@@ -266,8 +274,8 @@ export class Download extends EventTarget implements IDownloadEvents {
 			}),
 		)
 
-		const netQueue = new OQ<void>(this.config.queueSize.net)
-		const decryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize.decrypt)
+		const netQueue = new OQ<void>(this.config.queueSize!.net)
+		const decryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize!.decrypt)
 
 		d._netQueue = netQueue
 		d._decryptQueue = decryptQueue
@@ -295,7 +303,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 
 						d.dispatchEvent(new DownloadPartStartedEvent({ index: partIndex }))
 
-						const res = await d.config.network
+						const res = await d.config.net
 							.GET(
 								downloadUrl + "/file",
 								{
@@ -304,11 +312,11 @@ export class Download extends EventTarget implements IDownloadEvents {
 									}`,
 								},
 								undefined,
-								async (rs) => (rs ? polyfillReadableStream(rs) : undefined),
+								async (rs) => (rs ? (polyfillReadableStreamIfNeeded(rs) as ReadableStream<Uint8Array>) : undefined),
 							)
 							.catch(d._reject)
 
-						if (!res) {
+						if (!res || !res.data) {
 							return
 						}
 
@@ -330,7 +338,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 
 										controller.enqueue(chunk)
 									},
-								}),
+								}) as ReadableWritablePair<Uint8Array, Uint8Array>,
 							)
 							.pipeThrough(new Uint8ArrayChunkStream(partSizeOnFS))
 							.pipeTo(
@@ -370,7 +378,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 											)
 										}
 									},
-								}),
+								}) as WritableStream<Uint8Array>,
 							)
 
 						await decryptQueue.waitForCommit(Math.min((partIndex + 1) * blocksPerPart, d._numberOfBlocks!) - 1)
@@ -397,7 +405,12 @@ export class Download extends EventTarget implements IDownloadEvents {
 					},
 				)
 
-				Promise.all([netQueue.waitForClose(), decryptQueue.waitForClose()]).then(() => {
+				// the start function is blocking for pulls so this must not be awaited
+				Promise.all([netQueue.waitForClose(), decryptQueue.waitForClose()]).then(async () => {
+					if (d._afterDownload) {
+						await d._afterDownload(d).catch(d._reject)
+					}
+
 					d._resolve()
 					controller.close()
 				})
@@ -405,7 +418,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 			cancel () {
 				d._cancelled = true
 			},
-		})
+		}) as ReadableStream<Uint8Array>
 
 		return d._output
 	}
@@ -420,5 +433,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 		if (this._output) {
 			this._output.cancel()
 		}
+
+		this._reject()
 	}
 }

@@ -1,7 +1,7 @@
 import HDKey from "hdkey/lib/hdkey"
 
-import { CryptoMiddleware } from "../middleware"
-import { hashToPath, pathHash } from "../../../util/src/derive"
+import { CryptoMiddleware } from "@opacity/middleware"
+import { hashToPath, pathHash } from "@opacity/util/src/derive"
 
 export type WebAccountMiddlewareArgs = {
 	asymmetricKey?: Uint8Array
@@ -66,7 +66,7 @@ export class WebAccountMiddleware implements CryptoMiddleware {
 			"raw",
 			await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]),
 		)
-		return new Uint8Array(key, key.byteLength)
+		return new Uint8Array(key)
 	}
 
 	async encrypt (k: Uint8Array | undefined = this.symmetricKey, d: Uint8Array): Promise<Uint8Array> {

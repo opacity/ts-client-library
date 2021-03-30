@@ -1,7 +1,7 @@
 import { posix } from "path-browserify"
-import { sha3_256 } from "js-sha3"
+import { keccak_256 } from "js-sha3"
 
-export const pathHash = (path: string) => {
+export const pathHash = (path: string): Uint8Array => {
 	path = posix.normalize(path)
 
 	let node = new Uint8Array(32)
@@ -9,9 +9,9 @@ export const pathHash = (path: string) => {
 	if (path) {
 		var labels = path.split("/")
 
-		for (var i = labels.length - 1; i >= 0; i--) {
-			var labelSha = new Uint8Array(sha3_256.arrayBuffer(labels[i]))
-			node = new Uint8Array(sha3_256.arrayBuffer(new Uint8Array(Array.from(node).concat(Array.from(labelSha)))))
+		for (var i = 0; i < labels.length; i++) {
+			var labelSha = new Uint8Array(keccak_256.arrayBuffer(labels[i]))
+			node = new Uint8Array(keccak_256.arrayBuffer(new Uint8Array(Array.from(node).concat(Array.from(labelSha)))))
 		}
 	}
 
@@ -26,4 +26,13 @@ export const hashToPath = (hash: Uint8Array): string => {
 	return (
 		"" + new Uint16Array(hash.buffer, hash.byteOffset, hash.byteLength / Uint16Array.BYTES_PER_ELEMENT).join("'/") + "'"
 	)
+}
+
+/**
+ * @internal
+ * DO NOT USE. Incomplete implementation of namehash.
+ * Missing IDNA-UTS #46 normalization
+ */
+export const nameHash = (name: string) => {
+	return pathHash(name.split(".").reverse().join("/"))
 }

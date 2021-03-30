@@ -1,10 +1,22 @@
 import {
 	ReadableStream as ReadableStreamPolyfill,
-	WritableStream,
-	TransformStream,
+	WritableStream as WritableStreamPolyfill,
+	TransformStream as TransformStreamPolyfill,
 } from "web-streams-polyfill/ponyfill"
 
-export const polyfillReadableStream = <T>(rs: ReadableStream<T>, strategy?: QueuingStrategy<T>) => {
+export const needsStreamPolyfill = () => {
+	return !("ReadableStream" in globalThis && "WritableStream" in globalThis && "TransformStream" in globalThis)
+}
+
+export const ReadableStream = needsStreamPolyfill() ? ReadableStreamPolyfill : globalThis.ReadableStream
+export const TransformStream = needsStreamPolyfill() ? TransformStreamPolyfill : globalThis.TransformStream
+export const WritableStream = needsStreamPolyfill() ? WritableStreamPolyfill : globalThis.WritableStream
+
+export const polyfillReadableStreamIfNeeded = <T>(rs: ReadableStream<T>, strategy?: QueuingStrategy<T>) => {
+	if (!needsStreamPolyfill()) {
+		return rs
+	}
+
 	const reader = rs.getReader()
 
 	return new ReadableStreamPolyfill<T>(
@@ -19,6 +31,29 @@ export const polyfillReadableStream = <T>(rs: ReadableStream<T>, strategy?: Queu
 				if (r.done) {
 					controller.close()
 				}
+			},
+		},
+		strategy,
+	)
+}
+
+export const polyfillWritableStreamIfNeeded = <T>(ws: WritableStream<T>, strategy?: QueuingStrategy<T>) => {
+	if (!needsStreamPolyfill()) {
+		return ws
+	}
+
+	const writer = ws.getWriter()
+
+	return new WritableStreamPolyfill<T>(
+		{
+			async write (value: T) {
+				return await writer.write(value)
+			},
+			async abort () {
+				return await writer.abort()
+			},
+			async close () {
+				return await writer.close()
 			},
 		},
 		strategy,
@@ -40,7 +75,7 @@ export class Uint8ArrayChunkStream implements TransformStream<Uint8Array, Uint8A
 
 	_transformer: TransformStream<Uint8Array, Uint8Array>
 
-	readable: ReadableStreamPolyfill<Uint8Array>
+	readable: ReadableStream<Uint8Array>
 	writable: WritableStream<Uint8Array>
 
 	constructor (
@@ -80,7 +115,7 @@ export class Uint8ArrayChunkStream implements TransformStream<Uint8Array, Uint8A
 			},
 			writableStrategy,
 			readableStrategy,
-		)
+		) as TransformStream
 
 		this.readable = this._transformer.readable
 		this.writable = this._transformer.writable

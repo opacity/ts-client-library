@@ -1,5 +1,5 @@
 import { FileMeta } from "./filemeta"
-import { EventListenerOrEventListenerObject } from "../../util/src/events"
+import { EventListenerOrEventListenerObject } from "@opacity/util/src/events"
 
 export enum DownloadEvents {
 	METADATA = "metadata",
@@ -136,7 +136,7 @@ export class UploadMetadataEvent extends CustomEvent<UploadMetadataEventData> {
 type UploadStartedEventData = { time: number; numberOfBlocks: number; numberOfParts: number }
 export class UploadStartedEvent extends CustomEvent<UploadStartedEventData> {
 	constructor (data: UploadStartedEventData) {
-		super(UploadEvents.FINISH, { detail: data })
+		super(UploadEvents.START, { detail: data })
 	}
 }
 type UploadFinishedEventData = { start: number; end: number; duration: number; realDuration: number }
@@ -225,6 +225,31 @@ export interface IUploadEvents {
 	addEventListener(
 		type: UploadEvents.PART_FINISH,
 		listener: EventListenerOrEventListenerObject<UploadPartFinishedEvent> | null,
+		options?: boolean | AddEventListenerOptions | undefined,
+	): void
+}
+
+export enum FileSystemObjectEvents {
+	DELETE = "delete",
+}
+
+type FileSystemObjectDeleteEventData = {}
+export class FileSystemObjectDeleteEvent extends CustomEvent<FileSystemObjectDeleteEventData> {
+	constructor (data: FileSystemObjectDeleteEventData) {
+		super(FileSystemObjectEvents.DELETE, { detail: data })
+	}
+}
+
+export interface IFileSystemObjectEvents {
+	addEventListener(
+		type: FileSystemObjectEvents,
+		listener: EventListener | EventListenerObject | null,
+		options?: boolean | AddEventListenerOptions | undefined,
+	): void
+
+	addEventListener(
+		type: FileSystemObjectEvents.DELETE,
+		listener: EventListenerOrEventListenerObject<FileSystemObjectDeleteEvent> | null,
 		options?: boolean | AddEventListenerOptions | undefined,
 	): void
 }

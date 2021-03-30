@@ -1,12 +1,12 @@
 import Automerge from "automerge/src/automerge"
 import jssha from "jssha/src/sha256"
 
-import { b64ToBytes, bytesToB64 } from "../../util/src/b64"
-import { cleanPath } from "../../util/src/path"
-import { CryptoMiddleware, NetworkMiddleware } from "../../middleware/src/middleware"
+import { b64ToBytes, bytesToB64 } from "@opacity/util/src/b64"
+import { cleanPath } from "@opacity/util/src/path"
+import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { DAG, DAGVertex } from "./dag"
-import { getPayload } from "../../util/src/payload"
-import { readUInt32BE, uint32ToUint8BE } from "../../util/src/uint"
+import { getPayload } from "@opacity/util/src/payload"
+import { readUInt32BE, uint32ToUint8BE } from "@opacity/util/src/uint"
 
 const sha256 = (d: Uint8Array): Uint8Array => {
 	const digest = new jssha("SHA-256", "UINT8ARRAY")
@@ -28,6 +28,7 @@ type MetadataAddPayload = {
 	metadataV2Vertex: string
 	metadataV2Edges: string[]
 	metadataV2Sig: string
+	isPublic: boolean
 }
 
 type MetadataAddRes = {
@@ -103,32 +104,86 @@ const unpackChanges = (packed: Uint8Array): Uint8Array[] => {
 export class MetadataAccess {
 	config: MetadataAccessConfig
 	dags: { [path: string]: DAG } = {}
+	cache: {
+		[path: string]: {
+			lastAccess: number
+			dirty: boolean
+			doc: Automerge.Doc<unknown> | undefined
+		}
+	} = {}
 
 	constructor (config: MetadataAccessConfig) {
 		this.config = config
+	}
+
+	async markCacheDirty (path: string) {
+		const priv = await this.config.crypto.derive(undefined, path)
+		const pub = await this.config.crypto.getPublicKey(priv)
+
+		return this._markCacheDirty(pub)
+	}
+
+	_markCacheDirty (pub: Uint8Array) {
+		const pubString = bytesToB64(pub)
+		const cached = this.cache[pubString]
+
+		if (cached) {
+			cached.dirty = true
+		}
 	}
 
 	async change<T = unknown> (
 		path: string,
 		description: string,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
+		markCacheDirty = false,
 	): Promise<Automerge.Doc<T>> {
+		// console.log("change(", path, description, fn, ")")
+
 		path = cleanPath(path)
 
+		const priv = await this.config.crypto.derive(undefined, path)
+		return await this._change<T>(priv, description, fn, false, undefined, markCacheDirty)
+	}
+
+	async changePublic<T = unknown> (
+		priv: Uint8Array,
+		description: string,
+		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
+		encryptKey: Uint8Array,
+		markCacheDirty = false,
+	): Promise<Automerge.Doc<T>> {
+		// console.log("changePublic(", priv, description, fn, encryptKey, ")")
+
+		return await this._change<T>(priv, description, fn, true, encryptKey, markCacheDirty)
+	}
+
+	async _change<T = unknown> (
+		priv: Uint8Array,
+		description: string,
+		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
+		isPublic: boolean,
+		encryptKey?: Uint8Array,
+		markCacheDirty = false,
+	): Promise<Automerge.Doc<T>> {
+		// console.log("_change(", priv, description, fn, isPublic, encryptKey, ")")
+
+		const pub = await this.config.crypto.getPublicKey(priv)
+		const pubString = bytesToB64(pub)
+
 		// sync
-		const curDoc = (await this.get<T>(path)) || Automerge.init<T>()
-		const dag = this.dags[path]
+		const curDoc = (await this._get<T>(priv, undefined, markCacheDirty)) || Automerge.init<T>()
+		this.dags[pubString] = this.dags[pubString] || new DAG()
+		const dag = this.dags[pubString]
 
 		// change
 		const newDoc = Automerge.change(curDoc, description, fn)
 
 		// commit
-		const priv = await this.config.crypto.derive(undefined, path)
-		const pub = await this.config.crypto.getPublicKey(priv)
 
 		const changes = Automerge.getChanges(curDoc, newDoc)
 
-		const encrypted = await this.config.crypto.encrypt(sha256(priv), packChanges(changes))
+		const encrypted = await this.config.crypto.encrypt(encryptKey || sha256(priv), packChanges(changes))
 		const v = new DAGVertex(encrypted)
 		dag.addReduced(v)
 
@@ -137,10 +192,11 @@ export class MetadataAccess {
 		const payload = await getPayload<MetadataAddPayload>({
 			crypto: this.config.crypto,
 			payload: {
-				metadataV2Key: bytesToB64(pub),
-				metadataV2Vertex: bytesToB64(v.binary),
+				isPublic,
 				metadataV2Edges: edges.map((edge) => bytesToB64(edge.binary)),
+				metadataV2Key: pubString,
 				metadataV2Sig: bytesToB64(await this.config.crypto.sign(priv, await dag.digest(v.id, sha256))),
+				metadataV2Vertex: bytesToB64(v.binary),
 			},
 		})
 
@@ -151,55 +207,193 @@ export class MetadataAccess {
 			(res) => new Response(res).json(),
 		)
 
+		this.dags[pubString] = dag
+		this.cache[pubString] = {
+			lastAccess: Date.now(),
+			dirty: false,
+			doc: newDoc,
+		}
+
+		setTimeout(() => {
+			delete this.dags[pubString]
+			delete this.cache[pubString]
+		}, 60 * 1000)
+
 		return newDoc
 	}
 
-	async get<T> (path: string): Promise<Automerge.Doc<T> | undefined> {
+	async get<T> (path: string, markCacheDirty = false): Promise<Automerge.Doc<T> | undefined> {
+		// console.log("get(", path, ")")
+
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
+		return await this._get<T>(priv, undefined, markCacheDirty)
+	}
+
+	async _get<T> (
+		priv: Uint8Array,
+		decryptKey?: Uint8Array,
+		markCacheDirty = false,
+	): Promise<Automerge.Doc<T> | undefined> {
+		// console.log("_get(", priv, decryptKey, ")")
+
 		const pub = await this.config.crypto.getPublicKey(priv)
+		const pubString = bytesToB64(pub)
 
-		const payload = await getPayload<MetadataGetPayload>({
-			crypto: this.config.crypto,
-			payload: {
-				metadataV2Key: bytesToB64(pub),
-			},
-		})
+		const cached = this.cache[pubString]
 
-		const res = await this.config.net.POST<MetadataGetRes>(
-			this.config.metadataNode + "/api/v2/metadata/get",
-			undefined,
-			JSON.stringify(payload),
-			(res) => new Response(res).json(),
-		)
+		if (markCacheDirty || !cached || cached.dirty == true) {
+			console.warn(
+				"Cache: cache not used for",
+				pubString,
+				"because",
+				!cached ? "item was not found in cache" : "cache entry was marked dirty",
+			)
+			const payload = await getPayload<MetadataGetPayload>({
+				crypto: this.config.crypto,
+				payload: {
+					metadataV2Key: pubString,
+				},
+			})
 
-		if (((res.data as unknown) as string) == "Key not found") {
-			const dag = new DAG()
-			this.dags[path] = dag
+			const res = await this.config.net.POST<MetadataGetRes>(
+				this.config.metadataNode + "/api/v2/metadata/get",
+				undefined,
+				JSON.stringify(payload),
+				(res) => new Response(res).json(),
+			)
 
-			return undefined
+			if (((res.data as unknown) as string) == "Key not found") {
+				return undefined
+			}
+
+			const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
+			this.dags[pubString] = dag
+		}
+		else {
+			console.info("Cache: using cached value for", pubString)
+
+			cached.lastAccess = Date.now()
+
+			return cached.doc as Automerge.Doc<T>
 		}
 
-		const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
-		this.dags[path] = dag
-
-		const decrypted = await Promise.all(dag.nodes.map(({ data }) => this.config.crypto.decrypt(sha256(priv), data)))
+		const decrypted = await Promise.all(
+			this.dags[pubString].nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey || sha256(priv), data)),
+		)
 		const changes = decrypted.map((data) => unpackChanges(data)).flat()
 
-		return Automerge.applyChanges(Automerge.init<T>(), changes)
+		const doc = Automerge.applyChanges(Automerge.init<T>(), changes)
+		this.cache[pubString] = {
+			lastAccess: Date.now(),
+			dirty: false,
+			doc,
+		}
+
+		setTimeout(() => {
+			delete this.dags[pubString]
+			delete this.cache[pubString]
+		}, 60 * 1000)
+
+		return doc
+	}
+
+	async getPublic<T> (
+		priv: Uint8Array,
+		decryptKey: Uint8Array,
+		markCacheDirty = false,
+	): Promise<Automerge.Doc<T> | undefined> {
+		return await this._getPublic(priv, decryptKey)
+	}
+
+	async _getPublic<T> (
+		priv: Uint8Array,
+		decryptKey: Uint8Array,
+		markCacheDirty = false,
+	): Promise<Automerge.Doc<T> | undefined> {
+		// console.log("_getPublic", priv, decryptKey, ")")
+
+		const pub = await this.config.crypto.getPublicKey(priv)
+		const pubString = bytesToB64(pub)
+
+		const cached = this.cache[pubString]
+
+		if (markCacheDirty || !cached || cached.dirty == true) {
+			console.warn(
+				"Cache: cache not used for",
+				pubString,
+				"because",
+				!cached ? "item was not found in cache" : "cache entry was marked dirty",
+			)
+
+			const res = await this.config.net.POST<MetadataGetRes>(
+				this.config.metadataNode + "/api/v2/metadata/get-public",
+				undefined,
+				JSON.stringify({
+					requestBody: JSON.stringify({
+						metadataV2Key: pubString,
+						timestamp: Math.floor(Date.now() / 1000),
+					}),
+				}),
+				(res) => new Response(res).json(),
+			)
+
+			const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
+			this.dags[pubString] = dag
+		}
+		else {
+			console.info("Cache: using cached value for", pubString)
+
+			return cached.doc as Automerge.Doc<T>
+		}
+
+		const decrypted = await Promise.all(
+			this.dags[pubString].nodes.map(({ data }) => this.config.crypto.decrypt(decryptKey, data)),
+		)
+		const changes = decrypted.map((data) => unpackChanges(data)).flat()
+
+		const doc = Automerge.applyChanges(Automerge.init<T>(), changes)
+
+		this.cache[pubString] = {
+			lastAccess: Date.now(),
+			dirty: false,
+			doc,
+		}
+
+		setTimeout(() => {
+			delete this.dags[pubString]
+			delete this.cache[pubString]
+		}, 60 * 1000)
+
+		return doc
 	}
 
 	async delete (path: string): Promise<void> {
+		// console.log("delete(", path, ")")
+
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
+		return await this._delete(priv)
+	}
+
+	async deletePublic (priv: Uint8Array): Promise<void> {
+		// console.log("deletePublic(", priv, ")")
+
+		return await this._delete(priv)
+	}
+
+	async _delete (priv: Uint8Array): Promise<void> {
+		// console.log("_delete(", priv, ")")
+
 		const pub = await this.config.crypto.getPublicKey(priv)
+		const pubString = bytesToB64(pub)
 
 		const payload = await getPayload<MetadataDeletePayload>({
 			crypto: this.config.crypto,
 			payload: {
-				metadataV2Key: bytesToB64(pub),
+				metadataV2Key: pubString,
 			},
 		})
 
@@ -209,5 +403,8 @@ export class MetadataAccess {
 			JSON.stringify(payload),
 			(res) => new Response(res).json(),
 		)
+
+		delete this.dags[pubString]
+		delete this.cache[pubString]
 	}
 }
