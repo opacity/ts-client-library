@@ -31,7 +31,8 @@ export const bindDownloadToAccountSystem = (accountSystem: AccountSystem, d: Dow
 	// TODO: download history
 }
 
-export const bindDeleteToAccountSystem = (accountSystem: AccountSystem, o: FileSystemObject) => {
+export const bindFileSystemObjectToAccountSystem = (accountSystem: AccountSystem, o: FileSystemObject) => {
+	// handle deletion
 	o._afterDelete = async (o) => {
 		const handle = o._handle
 

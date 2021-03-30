@@ -28,7 +28,7 @@ export {
 } from "./events"
 
 export {
-	bindDeleteToAccountSystem,
+	bindFileSystemObjectToAccountSystem,
 	bindDownloadToAccountSystem,
 	bindUploadToAccountSystem,
 } from "./account-system-binding"
