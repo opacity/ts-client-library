@@ -15,6 +15,7 @@ export type FilesIndexEntry = {
 	public: boolean
 	handle: Uint8Array
 	deleted: boolean
+	errored: boolean
 }
 
 export type FilesIndex = { files: FilesIndexEntry[] }
@@ -229,6 +230,7 @@ export class AccountSystem {
 				public: !!file.public,
 				handle: unfreezeUint8Array(file.handle),
 				deleted: !!file.deleted,
+				errored: false,
 			})),
 		}
 	}
@@ -276,6 +278,7 @@ export class AccountSystem {
 			public: !!fileEntry.public,
 			handle: fileEntry.handle,
 			deleted: !!fileEntry.deleted,
+			errored: !!fileEntry.errored,
 		}
 	}
 
@@ -356,25 +359,8 @@ export class AccountSystem {
 					public: pub,
 					handle,
 					deleted: false,
+					errored: false,
 				})
-			},
-			markCacheDirty,
-		)
-
-		await this.config.metadataAccess.change<FolderMetadata>(
-			this.getFolderDerivePath(folderDerive),
-			`Add file "${bytesToB64(location)}" to folder`,
-			(doc) => {
-				if (!doc.files) {
-					doc.files = []
-				}
-				doc.files.push({
-					name: filename,
-					location: location,
-				})
-
-				doc.modified = Date.now()
-				doc.size++
 			},
 			markCacheDirty,
 		)
@@ -425,6 +411,24 @@ export class AccountSystem {
 			"Mark upload finished",
 			(doc) => {
 				doc.finished = true
+			},
+			markCacheDirty,
+		)
+
+		await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
+			`Add file "${bytesToB64(location)}" to folder`,
+			(doc) => {
+				if (!doc.files) {
+					doc.files = []
+				}
+				doc.files.push({
+					name: fileMeta.name,
+					location: location,
+				})
+
+				doc.modified = Date.now()
+				doc.size++
 			},
 			markCacheDirty,
 		)
