@@ -4,6 +4,7 @@
 		"allowSyntheticDefaultImports": true,
 		"esModuleInterop": true,
 		"experimentalDecorators": true,
+		"declaration": true,
 		"importHelpers": true,
 		"module": "ES2015",
 		"moduleResolution": "Node",
@@ -11,6 +12,10 @@
 		"noImplicitThis": true,
 		"sourceMap": true,
 		"strict": true,
-		"target": "ES2020"
-	}
+		"target": "ES2020",
+	},
+	"include": [
+		"types/**/*.d.ts",
+		"packages/**/src/**/*.ts",
+	],
 }

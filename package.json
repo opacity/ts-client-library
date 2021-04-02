@@ -16,6 +16,7 @@
 		"url": "https://github.com/opacity/ts-client-library/issues"
 	},
 	"scripts": {
+		"build": "tsc",
 		"pretty": "prettierx --ignore-path ./config/.prettierxignore --config ./config/.prettierx.config.json --write .",
 		"test": "testyts --config ./config/testy.json --tsconfig ./config/tsconfig.dev.json"
 	},
