@@ -708,6 +708,47 @@ export class AccountSystem {
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
+	async getAllFoldersInFolderRecursivelyByPath (path: string, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
+		// console.log("getAllFoldersInFolderRecursivelyByPath(", path, ")")
+
+		return await this._m.runExclusive(() => this._getAllFoldersInFolderRecursivelyByPath(path, markCacheDirty))
+	}
+
+	async _getAllFoldersInFolderRecursivelyByPath (path: string, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
+		// console.log("_getAllFoldersInFolderRecursivelyByPath(", path, ")")
+
+		path = cleanPath(path)
+		validateDirectoryPath(path)
+
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
+
+		return (await Promise.all(foldersIndex.folders
+			.filter((folder) => isPathChild(path, folder.path))
+			.map(async (folder) => [folder, await this._getAllFoldersInFolderRecursivelyByPath(folder.path)].flat())
+		)).flat()
+	}
+
+	async getAllFilesInFolderRecursivelyByPath (path: string, markCacheDirty = false): Promise<FilesIndexEntry[]> {
+		// console.log("getAllFoldersInFolderRecursivelyByPath(", path, ")")
+
+		return await this._m.runExclusive(() => this._getAllFilesInFolderRecursivelyByPath(path, markCacheDirty))
+	}
+
+	async _getAllFilesInFolderRecursivelyByPath (path: string, markCacheDirty = false): Promise<FilesIndexEntry[]> {
+		// console.log("_getAllFoldersInFolderRecursivelyByPath(", path, ")")
+
+		path = cleanPath(path)
+		validateDirectoryPath(path)
+
+		const folderMeta = await this._getFolderMetadataByPath(path)
+		const foldersInFolder = await this._getAllFoldersInFolderRecursivelyByPath(path, markCacheDirty)
+		const filesIndex = await this._getFilesIndex()
+
+		const filesInFolder = (await Promise.all(foldersInFolder.map(async (folder) => (await this._getFolderMetadataByPath(folder.path, markCacheDirty)).files))).flat()
+
+		return filesIndex.files.filter((fileEntry) => ([] as FolderFileEntry[]).concat(folderMeta.files, filesInFolder).some((folderFileEntry) => arraysEqual(folderFileEntry.location, fileEntry.location)))
+	}
+
 	async getFoldersInFolderByLocation (location: Uint8Array, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
 		// console.log("getFoldersInFolderByLocation(", location, ")")
 
@@ -728,6 +769,57 @@ export class AccountSystem {
 		const path = folderEntry.path
 
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
+	}
+
+	async getAllFoldersInFolderRecursivelyByLocation (location: Uint8Array, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
+		// console.log("getAllFoldersInFolderRecursivelyByLocation(", location, ")")
+
+		return await this._m.runExclusive(() => this._getAllFoldersInFolderRecursivelyByLocation(location, markCacheDirty))
+	}
+
+	async _getAllFoldersInFolderRecursivelyByLocation (location: Uint8Array, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
+		// console.log("_getAllFoldersInFolderRecursivelyByLocation(", location, ")")
+
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
+
+		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
+
+		if (!folderEntry) {
+			throw new AccountSystemNotFoundError("folder entry", bytesToB64(location))
+		}
+
+		const path = folderEntry.path
+
+		return (await Promise.all(foldersIndex.folders
+			.filter((folder) => isPathChild(path, folder.path))
+			.map(async (folder) => [folder, await this._getAllFoldersInFolderRecursivelyByLocation(folder.location)].flat())
+		)).flat()
+	}
+
+	async getAllFilesInFolderRecursivelyByLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry[]> {
+		// console.log("getAllFoldersInFolderRecursivelyByLocation(", location, ")")
+
+		return await this._m.runExclusive(() => this._getAllFilesInFolderRecursivelyByLocation(location, markCacheDirty))
+	}
+
+	async _getAllFilesInFolderRecursivelyByLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry[]> {
+		// console.log("_getAllFoldersInFolderRecursivelyByLocation(", location, ")")
+
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
+
+		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
+
+		if (!folderEntry) {
+			throw new AccountSystemNotFoundError("folder entry", bytesToB64(location))
+		}
+
+		const folderMeta = await this._getFolderMetadataByLocation(location)
+		const foldersInFolder = await this._getAllFoldersInFolderRecursivelyByLocation(folderEntry.location, markCacheDirty)
+		const filesIndex = await this._getFilesIndex()
+
+		const filesInFolder = (await Promise.all(foldersInFolder.map(async (folder) => (await this._getFolderMetadataByLocation(folder.location, markCacheDirty)).files))).flat()
+
+		return filesIndex.files.filter((fileEntry) => ([] as FolderFileEntry[]).concat(folderMeta.files, filesInFolder).some((folderFileEntry) => arraysEqual(folderFileEntry.location, fileEntry.location)))
 	}
 
 	async getFolderMetadataByPath (path: string, markCacheDirty = false): Promise<FolderMetadata> {
@@ -984,10 +1076,7 @@ export class AccountSystem {
 		}
 
 		const childFolders = await this._getFoldersInFolderByLocation(location, markCacheDirty)
-
-		if (childFolders.length) {
-			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
-		}
+		await Promise.all(childFolders.map((folder) => this._removeFolderByLocation(folder.location)))
 
 		await this.config.metadataAccess.delete(this.getFolderDerivePath(location))
 
