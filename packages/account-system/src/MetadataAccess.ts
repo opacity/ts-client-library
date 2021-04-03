@@ -1,5 +1,5 @@
 import Automerge from "automerge/src/automerge"
-import jssha from "jssha/src/sha256"
+import jssha from "jssha/dist/sha256"
 
 import { b64ToBytes, bytesToB64 } from "@opacity/util/src/b64"
 import { cleanPath } from "@opacity/util/src/path"
