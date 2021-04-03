@@ -1,6 +1,6 @@
 {
 	"name": "@opacity/util",
-	"version": "0.0.40",
+	"version": "0.0.41",
 	"description": "> TODO: description",
 	"author": "Connor <13987924+CKH4@users.noreply.github.com>",
 	"homepage": "https://github.com/opacity/ts-client-library#readme",
@@ -22,7 +22,7 @@
 		"test": "echo \"Error: run tests from root\" && exit 1"
 	},
 	"dependencies": {
-		"@opacity/middleware": "^0.0.40",
+		"@opacity/middleware": "^0.0.41",
 		"async-mutex": "^0.2.6",
 		"bip39": "^3.0.3",
 		"buffer": "^6.0.3",
