@@ -81,6 +81,10 @@ export type AccountSignupArgs = {
 	duration?: number
 }
 
+export type AccountStripeArgs = {
+	stripeToken?: string
+}
+
 export type AccountConfig = {
 	crypto: CryptoMiddleware
 	net: NetworkMiddleware
@@ -106,6 +110,22 @@ export class Account {
 
 		if (!res.ok) {
 			throw new Error("Error getting account information: " + JSON.stringify(res.data))
+		}
+
+		return res.data
+	}
+
+	async createSubscription ({ stripeToken = '' }: AccountStripeArgs = {}) : Promise<AccountGetRes> {
+		const payload = await getPayload({ crypto: this.config.crypto, payload: { stripeToken } })
+		const res = await this.config.net.POST(
+			this.config.storageNode + "/api/v1/stripe/create",
+			undefined,
+			JSON.stringify(payload),
+			(body) => new Response(body).json(),
+		)
+
+		if (!res.ok) {
+			throw new Error("Error getting Stripe information: " + JSON.stringify(res.data))
 		}
 
 		return res.data
