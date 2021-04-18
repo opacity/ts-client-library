@@ -210,6 +210,13 @@ export class MetadataAccess {
 					return
 				}
 
+				if (!doc.privs) {
+					doc.privs = {}
+				}
+				if (!doc.encryptKeys) {
+					doc.encryptKeys = {}
+				}
+
 				doc.privs[privString] = true
 				if (encryptKeyString) {
 					doc.encryptKeys[privString] = encryptKeyString
