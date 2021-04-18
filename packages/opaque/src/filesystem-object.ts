@@ -32,6 +32,29 @@ export class FileSystemObject extends EventTarget {
 		this.config = config
 	}
 
+	async exists () {
+		if (!this._handle) {
+			console.warn("filesystem object already deleted")
+
+			return
+		}
+
+		const res = await this.config.net.POST(
+			this.config.storageNode + "/api/v1/delete",
+			undefined,
+			JSON.stringify({
+				fileID: bytesToHex(this._handle.slice(0, 32))
+			}),
+			(b) => new Response(b).text(),
+		)
+
+		if (res.status == 200) {
+			return true
+		}
+
+		return false
+	}
+
 	async delete () {
 		if (!this._handle) {
 			console.warn("filesystem object already deleted")
