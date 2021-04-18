@@ -40,7 +40,7 @@ export class FileSystemObject extends EventTarget {
 		}
 
 		const res = await this.config.net.POST(
-			this.config.storageNode + "/api/v1/delete",
+			this.config.storageNode + "/api/v1/download",
 			undefined,
 			JSON.stringify({
 				fileID: bytesToHex(this._handle.slice(0, 32))
