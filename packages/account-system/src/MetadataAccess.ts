@@ -1,3 +1,4 @@
+import { Semaphore } from "async-mutex"
 import Automerge from "automerge/src/automerge"
 import jssha from "jssha/dist/sha256"
 
@@ -101,6 +102,15 @@ const unpackChanges = (packed: Uint8Array): Uint8Array[] => {
 	return changes
 }
 
+type MetadataIndex = {
+	privs: {
+		[location: string]: true
+	}
+	encryptKeys: {
+		[location: string]: string
+	}
+}
+
 export class MetadataAccess {
 	config: MetadataAccessConfig
 	dags: { [path: string]: DAG } = {}
@@ -111,6 +121,10 @@ export class MetadataAccess {
 			doc: Automerge.Doc<unknown> | undefined
 		}
 	} = {}
+
+	metadataIndexPath = "/metadata-index"
+
+	_sem: Semaphore = new Semaphore(3)
 
 	constructor (config: MetadataAccessConfig) {
 		this.config = config
@@ -132,6 +146,110 @@ export class MetadataAccess {
 		}
 	}
 
+	async getMetadataLocationKeysList (): Promise<string[]> {
+		const priv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
+
+		// do not cache
+		const metaIndexObject = (await this._get<MetadataIndex>(priv, undefined, true)) || ({} as MetadataIndex)
+
+		const metaIndexPrivs = [bytesToB64(priv)].concat(Object.keys(metaIndexObject.privs))
+
+		const validLocations = (
+			await Promise.all(
+				metaIndexPrivs.map((privString) => {
+					return this._sem.runExclusive(async () => {
+						const priv = b64ToBytes(privString)
+						const pub = await this.config.crypto.getPublicKey(priv)
+						const pubString = bytesToB64(pub)
+
+						const payload = await getPayload<MetadataGetPayload>({
+							crypto: this.config.crypto,
+							payload: {
+								metadataV2Key: pubString,
+							},
+						})
+
+						const res = await this.config.net.POST<MetadataGetRes>(
+							this.config.metadataNode + "/api/v2/metadata/get",
+							undefined,
+							JSON.stringify(payload),
+							(res) => new Response(res).json(),
+						)
+
+						if (((res.data as unknown) as string) == "Key not found") {
+							return undefined
+						}
+
+						return pubString
+					})
+				}),
+			)
+		).filter(Boolean) as string[]
+
+		return validLocations
+	}
+
+	async _metadataIndexAdd (priv: Uint8Array, encryptKey: Uint8Array | undefined) {
+		const privString = bytesToB64(priv)
+		const encryptKeyString = encryptKey ? bytesToB64(encryptKey) : undefined
+
+		const metaIndexPriv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
+
+		// fast check
+		const doc = await this._get<MetadataIndex>(metaIndexPriv, undefined, false)
+		if (doc && privString in doc.privs) {
+			return
+		}
+
+		// long set
+		await this._change<MetadataIndex>(
+			metaIndexPriv,
+			undefined,
+			(doc) => {
+				if (privString in doc) {
+					return
+				}
+
+				doc.privs[privString] = true
+				if (encryptKeyString) {
+					doc.encryptKeys[privString] = encryptKeyString
+				}
+			},
+			false,
+			undefined,
+			true,
+		)
+	}
+
+	async _metadataIndexRemove (priv: Uint8Array) {
+		const privString = bytesToB64(priv)
+
+		const metaIndexPriv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
+
+		// fast check
+		const doc = await this._get<MetadataIndex>(metaIndexPriv, undefined, false)
+		if (doc && !(privString in doc.privs)) {
+			return
+		}
+
+		// long set
+		await this._change<MetadataIndex>(
+			metaIndexPriv,
+			undefined,
+			(doc) => {
+				if (privString in doc) {
+					return
+				}
+
+				delete doc.privs[privString]
+				delete doc.encryptKeys[privString]
+			},
+			false,
+			undefined,
+			true,
+		)
+	}
+
 	async change<T = unknown> (
 		path: string,
 		description: string,
@@ -143,24 +261,28 @@ export class MetadataAccess {
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
+		await this._metadataIndexAdd(priv, undefined)
+
 		return await this._change<T>(priv, description, fn, false, undefined, markCacheDirty)
 	}
 
 	async changePublic<T = unknown> (
 		priv: Uint8Array,
-		description: string,
+		description: string | undefined,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 		encryptKey: Uint8Array,
 		markCacheDirty = false,
 	): Promise<Automerge.Doc<T>> {
 		// console.log("changePublic(", priv, description, fn, encryptKey, ")")
 
+		await this._metadataIndexAdd(priv, encryptKey)
+
 		return await this._change<T>(priv, description, fn, true, encryptKey, markCacheDirty)
 	}
 
 	async _change<T = unknown> (
 		priv: Uint8Array,
-		description: string,
+		description: string | undefined,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 		isPublic: boolean,
 		encryptKey?: Uint8Array,
@@ -177,11 +299,15 @@ export class MetadataAccess {
 		const dag = this.dags[pubString]
 
 		// change
-		const newDoc = Automerge.change(curDoc, description, fn)
+		const newDoc = description ? Automerge.change(curDoc, description, fn) : Automerge.change(curDoc, fn)
 
 		// commit
 
 		const changes = Automerge.getChanges(curDoc, newDoc)
+
+		if (!changes.length) {
+			return curDoc
+		}
 
 		const encrypted = await this.config.crypto.encrypt(encryptKey || sha256(priv), packChanges(changes))
 		const v = new DAGVertex(encrypted)
@@ -375,13 +501,16 @@ export class MetadataAccess {
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
-		return await this._delete(priv)
+
+		await this._delete(priv)
+		await this._metadataIndexRemove(priv)
 	}
 
 	async deletePublic (priv: Uint8Array): Promise<void> {
 		// console.log("deletePublic(", priv, ")")
 
-		return await this._delete(priv)
+		await this._delete(priv)
+		await this._metadataIndexRemove(priv)
 	}
 
 	async _delete (priv: Uint8Array): Promise<void> {
