@@ -146,7 +146,7 @@ export class MetadataAccess {
 		}
 	}
 
-	async getMetadataLocationKeysList (): Promise<string[]> {
+	async getMetadataLocationKeysList (): Promise<Uint8Array[]> {
 		const priv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
 
 		// do not cache
@@ -180,11 +180,11 @@ export class MetadataAccess {
 							return undefined
 						}
 
-						return pubString
+						return pub
 					})
 				}),
 			)
-		).filter(Boolean) as string[]
+		).filter(Boolean) as Uint8Array[]
 
 		return validLocations
 	}
