@@ -234,7 +234,7 @@ export class Account {
 			},
 		})
 		const res = await this.config.net.POST<AccountRenewStatusRes>(
-			this.config.storageNode + "/api/v1/renew",
+			this.config.storageNode + "/api/v2/renew",
 			undefined,
 			JSON.stringify(payload),
 			(body) => new Response(body).json(),
@@ -263,7 +263,7 @@ export class Account {
 			},
 		})
 		const res = await this.config.net.POST<AccountRenewRes>(
-			this.config.storageNode + "/api/v1/renew/invoice",
+			this.config.storageNode + "/api/v2/renew/invoice",
 			undefined,
 			JSON.stringify(payload),
 			(body) => new Response(body).json(),
