@@ -17,6 +17,7 @@
 	},
 	"scripts": {
 		"build": "npx --package typescript tsc",
+		"build:cleanup": "rm ./packages/**/src/*.d.ts ./packages/**/src/*.js ./packages/**/src/*.js.map",
 		"pretty": "prettierx --ignore-path ./config/.prettierxignore --config ./config/.prettierx.config.json --write .",
 		"test": "testyts --config ./config/testy.json --tsconfig ./config/tsconfig.dev.json"
 	},
