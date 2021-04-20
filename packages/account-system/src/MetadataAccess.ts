@@ -2,7 +2,7 @@ import { Semaphore } from "async-mutex"
 import Automerge from "automerge/src/automerge"
 import jssha from "jssha/dist/sha256"
 
-import { b64ToBytes, bytesToB64 } from "@opacity/util/src/b64"
+import { b64URLToBytes, bytesToB64URL } from "@opacity/util/src/b64"
 import { cleanPath } from "@opacity/util/src/path"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { DAG, DAGVertex } from "./dag"
@@ -138,7 +138,7 @@ export class MetadataAccess {
 	}
 
 	_markCacheDirty (pub: Uint8Array) {
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 		const cached = this.cache[pubString]
 
 		if (cached) {
@@ -152,15 +152,15 @@ export class MetadataAccess {
 		// do not cache
 		const metaIndexObject = (await this._get<MetadataIndex>(priv, undefined, true)) || ({} as MetadataIndex)
 
-		const metaIndexPrivs = [bytesToB64(priv)].concat(Object.keys(metaIndexObject.privs))
+		const metaIndexPrivs = [bytesToB64URL(priv)].concat(Object.keys(metaIndexObject.privs))
 
 		const validLocations = (
 			await Promise.all(
 				metaIndexPrivs.map((privString) => {
 					return this._sem.runExclusive(async () => {
-						const priv = b64ToBytes(privString)
+						const priv = b64URLToBytes(privString)
 						const pub = await this.config.crypto.getPublicKey(priv)
-						const pubString = bytesToB64(pub)
+						const pubString = bytesToB64URL(pub)
 
 						const payload = await getPayload<MetadataGetPayload>({
 							crypto: this.config.crypto,
@@ -190,8 +190,8 @@ export class MetadataAccess {
 	}
 
 	async _metadataIndexAdd (priv: Uint8Array, encryptKey: Uint8Array | undefined) {
-		const privString = bytesToB64(priv)
-		const encryptKeyString = encryptKey ? bytesToB64(encryptKey) : undefined
+		const privString = bytesToB64URL(priv)
+		const encryptKeyString = encryptKey ? bytesToB64URL(encryptKey) : undefined
 
 		const metaIndexPriv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
 
@@ -229,7 +229,7 @@ export class MetadataAccess {
 	}
 
 	async _metadataIndexRemove (priv: Uint8Array) {
-		const privString = bytesToB64(priv)
+		const privString = bytesToB64URL(priv)
 
 		const metaIndexPriv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
 
@@ -298,7 +298,7 @@ export class MetadataAccess {
 		// console.log("_change(", priv, description, fn, isPublic, encryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 
 		// sync
 		const curDoc = (await this._get<T>(priv, undefined, markCacheDirty)) || Automerge.init<T>()
@@ -326,10 +326,10 @@ export class MetadataAccess {
 			crypto: this.config.crypto,
 			payload: {
 				isPublic,
-				metadataV2Edges: edges.map((edge) => bytesToB64(edge.binary)),
+				metadataV2Edges: edges.map((edge) => bytesToB64URL(edge.binary)),
 				metadataV2Key: pubString,
-				metadataV2Sig: bytesToB64(await this.config.crypto.sign(priv, await dag.digest(v.id, sha256))),
-				metadataV2Vertex: bytesToB64(v.binary),
+				metadataV2Sig: bytesToB64URL(await this.config.crypto.sign(priv, await dag.digest(v.id, sha256))),
+				metadataV2Vertex: bytesToB64URL(v.binary),
 			},
 		})
 
@@ -372,7 +372,7 @@ export class MetadataAccess {
 		// console.log("_get(", priv, decryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 
 		const cached = this.cache[pubString]
 
@@ -401,7 +401,7 @@ export class MetadataAccess {
 				return undefined
 			}
 
-			const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
+			const dag = DAG.fromBinary(b64URLToBytes(res.data.metadataV2))
 			this.dags[pubString] = dag
 		}
 		else {
@@ -448,7 +448,7 @@ export class MetadataAccess {
 		// console.log("_getPublic", priv, decryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 
 		const cached = this.cache[pubString]
 
@@ -472,7 +472,7 @@ export class MetadataAccess {
 				(res) => new Response(res).json(),
 			)
 
-			const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
+			const dag = DAG.fromBinary(b64URLToBytes(res.data.metadataV2))
 			this.dags[pubString] = dag
 		}
 		else {
@@ -524,7 +524,7 @@ export class MetadataAccess {
 		// console.log("_delete(", priv, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 
 		const payload = await getPayload<MetadataDeletePayload>({
 			crypto: this.config.crypto,

@@ -2,7 +2,7 @@ import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { extractPromise } from "@opacity/util/src/promise"
 import { getPayload } from "@opacity/util/src/payload"
 import { bytesToHex } from "@opacity/util/src/hex"
-import { bytesToB64 } from "@opacity/util/src/b64"
+import { bytesToB64URL } from "@opacity/util/src/b64"
 
 export type AccountPlanInfo = {
 	name: string
@@ -230,7 +230,7 @@ export class Account {
 			crypto: this.config.crypto,
 			payload: {
 				fileHandles: fileIDs.map((id) => bytesToHex(id)),
-				metadataKeys: metadataKeys.map((key) => bytesToB64(key)),
+				metadataKeys: metadataKeys.map((key) => bytesToB64URL(key)),
 			},
 		})
 		const res = await this.config.net.POST<AccountRenewStatusRes>(

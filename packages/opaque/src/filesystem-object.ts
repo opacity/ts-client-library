@@ -43,7 +43,7 @@ export class FileSystemObject extends EventTarget {
 			this.config.storageNode + "/api/v1/download",
 			undefined,
 			JSON.stringify({
-				fileID: bytesToHex(this._handle.slice(0, 32))
+				fileID: bytesToHex(this._handle.slice(0, 32)),
 			}),
 			(b) => new Response(b).text(),
 		)

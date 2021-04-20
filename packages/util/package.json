@@ -27,6 +27,7 @@
 		"bip39": "^3.0.3",
 		"buffer": "^6.0.3",
 		"hdkey": "https://github.com/cryptocoinjs/hdkey#browserFriendly",
+		"js-base64": "^3.6.0",
 		"js-sha3": "^0.8.0",
 		"path-browserify": "^1.0.1",
 		"tslib": "^2.1.0",

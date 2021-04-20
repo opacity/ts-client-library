@@ -1,9 +1,9 @@
-// TODO: these functions are not ideal
+import { fromUint8Array, toUint8Array } from "js-base64"
 
-export const bytesToB64 = (b: Uint8Array) => {
-	return btoa(String.fromCharCode.apply(null, Array.from(b)))
+export const bytesToB64URL = (b: Uint8Array) => {
+	return fromUint8Array(b, true)
 }
 
-export const b64ToBytes = (b64: string) => {
-	return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+export const b64URLToBytes = (b64: string) => {
+	return toUint8Array(b64)
 }
