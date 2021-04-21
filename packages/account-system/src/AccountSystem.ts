@@ -3,7 +3,7 @@ import { posix } from "path-browserify"
 import Automerge from "automerge/src/automerge"
 
 import { arraysEqual } from "@opacity/util/src/arrayEquality"
-import { bytesToB64 } from "@opacity/util/src/b64"
+import { bytesToB64URL } from "@opacity/util/src/b64"
 import { bytesToHex } from "@opacity/util/src/hex"
 import { cleanPath, isPathChild } from "@opacity/util/src/path"
 import { entropyToKey } from "@opacity/util/src/mnemonic"
@@ -205,7 +205,7 @@ export class AccountSystem {
 	///////////////////////////////
 
 	getFileDerivePath (location: Uint8Array): string {
-		return this.prefix + "/file/" + bytesToB64(location)
+		return this.prefix + "/file/" + bytesToB64URL(location)
 	}
 
 	async getFilesIndex (markCacheDirty = false): Promise<FilesIndex> {
@@ -269,7 +269,7 @@ export class AccountSystem {
 
 		if (!fileEntry) {
 			// TODO: orphan?
-			throw new AccountSystemNotFoundError("file", bytesToB64(location))
+			throw new AccountSystemNotFoundError("file", bytesToB64URL(location))
 		}
 
 		return {
@@ -348,7 +348,7 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FilesIndex>(
 			this.indexes.files,
-			`Add file "${bytesToB64(location)}" to file index`,
+			`Add file "${bytesToB64URL(location)}" to file index`,
 			(doc) => {
 				if (!doc.files) {
 					doc.files = []
@@ -367,7 +367,7 @@ export class AccountSystem {
 
 		const file = await this.config.metadataAccess.change<FileMetadata>(
 			filePath,
-			`Init file metadata for "${bytesToB64(location)}"`,
+			`Init file metadata for "${bytesToB64URL(location)}"`,
 			(doc) => {
 				doc.location = location
 				doc.handle = handle
@@ -417,7 +417,7 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
-			`Add file "${bytesToB64(location)}" to folder`,
+			`Add file "${bytesToB64URL(location)}" to folder`,
 			(doc) => {
 				if (!doc.files) {
 					doc.files = []
@@ -435,14 +435,14 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FilesIndex>(
 			this.indexes.files,
-			`Mark upload ${bytesToB64(location)} finished`,
+			`Mark upload ${bytesToB64URL(location)} finished`,
 			(doc) => {
 				const fileEntry = doc.files.find((file) => arraysEqual(location, file.location))
 
 				if (!fileEntry) {
 					throw new AccountSystemNotFoundError(
 						"file entry",
-						`"${bytesToB64(location)}" in "${bytesToB64(unfreezeUint8Array(fileMeta.folderDerive))}"`,
+						`"${bytesToB64URL(location)}" in "${bytesToB64URL(unfreezeUint8Array(fileMeta.folderDerive))}"`,
 					)
 				}
 
@@ -465,7 +465,7 @@ export class AccountSystem {
 
 		const fileIndexEntry = await this._getFileIndexEntryByLocation(location, markCacheDirty)
 		if (!fileIndexEntry) {
-			throw new AccountSystemNotFoundError("file", bytesToB64(location))
+			throw new AccountSystemNotFoundError("file", bytesToB64URL(location))
 		}
 
 		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
@@ -479,14 +479,14 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
-			`Rename file ${bytesToB64(location)}`,
+			`Rename file ${bytesToB64URL(location)}`,
 			(doc) => {
 				const fileEntry = doc.files.find((file) => arraysEqual(location, file.location))
 
 				if (!fileEntry) {
 					throw new AccountSystemNotFoundError(
 						"file entry",
-						`"${bytesToB64(location)}" in "${bytesToB64(unfreezeUint8Array(fileMeta.folderDerive))}"`,
+						`"${bytesToB64URL(location)}" in "${bytesToB64URL(unfreezeUint8Array(fileMeta.folderDerive))}"`,
 					)
 				}
 
@@ -530,7 +530,7 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(newFolder.location),
-			`Move file ${bytesToB64(location)}`,
+			`Move file ${bytesToB64URL(location)}`,
 			(doc) => {
 				doc.files.push({
 					location,
@@ -545,14 +545,14 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(oldFileMeta.folderDerive),
-			`Move file ${bytesToB64(location)}`,
+			`Move file ${bytesToB64URL(location)}`,
 			(doc) => {
 				const fileEntryIndex = doc.files.findIndex((file) => arraysEqual(location, file.location))
 
 				if (fileEntryIndex == -1) {
 					throw new AccountSystemNotFoundError(
 						"file entry",
-						`"${bytesToB64(location)}" in "${bytesToB64(oldFileMeta.folderDerive)}"`,
+						`"${bytesToB64URL(location)}" in "${bytesToB64URL(oldFileMeta.folderDerive)}"`,
 					)
 				}
 
@@ -602,7 +602,7 @@ export class AccountSystem {
 				const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
 				if (!fileEntry) {
-					throw new AccountSystemNotFoundError("file entry", bytesToB64(location))
+					throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
 				}
 
 				fileEntry.deleted = true
@@ -630,7 +630,7 @@ export class AccountSystem {
 	///////////////////////////////
 
 	getFolderDerivePath (location: Uint8Array): string {
-		return this.prefix + "/folder/" + bytesToB64(location)
+		return this.prefix + "/folder/" + bytesToB64URL(location)
 	}
 
 	async getFoldersIndex (markCacheDirty = false): Promise<FoldersIndex> {
@@ -774,7 +774,7 @@ export class AccountSystem {
 		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
 
 		if (!folderEntry) {
-			throw new AccountSystemNotFoundError("folder entry", bytesToB64(location))
+			throw new AccountSystemNotFoundError("folder entry", bytesToB64URL(location))
 		}
 
 		const path = folderEntry.path
@@ -802,7 +802,7 @@ export class AccountSystem {
 		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
 
 		if (!folderEntry) {
-			throw new AccountSystemNotFoundError("folder entry", bytesToB64(location))
+			throw new AccountSystemNotFoundError("folder entry", bytesToB64URL(location))
 		}
 
 		const path = folderEntry.path
@@ -838,7 +838,7 @@ export class AccountSystem {
 		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
 
 		if (!folderEntry) {
-			throw new AccountSystemNotFoundError("folder entry", bytesToB64(location))
+			throw new AccountSystemNotFoundError("folder entry", bytesToB64URL(location))
 		}
 
 		const folderMeta = await this._getFolderMetadataByLocation(location)
@@ -1110,7 +1110,7 @@ export class AccountSystem {
 		const folderMeta = await this._getFolderMetadataByLocation(location, markCacheDirty)
 
 		if (folderMeta.files.length) {
-			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
+			throw new AccountSystemNotEmptyError("folder", bytesToB64URL(location), "remove")
 		}
 
 		const childFolders = await this._getFoldersInFolderByLocation(location, markCacheDirty)
@@ -1120,7 +1120,7 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FoldersIndex>(
 			this.indexes.folders,
-			`Remove folder ${bytesToB64(location)}`,
+			`Remove folder ${bytesToB64URL(location)}`,
 			(doc) => {
 				const folderIndex = doc.folders.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
@@ -1256,7 +1256,7 @@ export class AccountSystem {
 		)
 
 		if (!shareMeta) {
-			throw new AccountSystemNotFoundError("shared", bytesToB64(handle))
+			throw new AccountSystemNotFoundError("shared", bytesToB64URL(handle))
 		}
 
 		return {
