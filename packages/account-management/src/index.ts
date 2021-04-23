@@ -53,6 +53,25 @@ export type AccountRenewRes = {
 	opctInvoice: AccountRenewInvoice
 }
 
+export type AccountUpgradePayload = {
+	storageLimit: number
+	durationInMonths: number
+}
+
+export type AccountUpgradeStatusPayload = {
+	metadataKeys: string[]
+	fileHandles: string[]
+}
+
+export type AccountUpgradeInvoice = {
+	cost: number
+	ethAddress: string
+}
+
+export type AccountUpgradeRes = {
+	opctInvoice: AccountUpgradeInvoice
+}
+
 export type AccountGetData = {
 	createdAt: number
 	updatedAt: number
@@ -94,6 +113,11 @@ export enum AccountRenewStatus {
 	PAID = "Success with OPCT",
 }
 
+export enum AccountUpgradeStatus {
+	INCOMPLETE = "Incomplete",
+	PAID = "Success with OPCT",
+}
+
 export type AccountGetRes = {
 	paymentStatus: keyof Record<AccountPaymentStatus, string>
 	error: string
@@ -104,6 +128,10 @@ export type AccountGetRes = {
 
 export type AccountRenewStatusRes = {
 	status: keyof Record<AccountRenewStatus, string>
+}
+
+export type AccountUpgradeStatusRes = {
+	status: keyof Record<AccountUpgradeStatus, string>
 }
 
 export type AccountSignupArgs = {
@@ -119,7 +147,17 @@ export type AccountRenewArgs = {
 	duration?: number
 }
 
+export type AccountUpgradeArgs = {
+	size: number
+	duration?: number
+}
+
 export type AccountRenewStatusArgs = {
+	metadataKeys: Uint8Array[]
+	fileIDs: Uint8Array[]
+}
+
+export type AccountUpgradeStatusArgs = {
 	metadataKeys: Uint8Array[]
 	fileIDs: Uint8Array[]
 }
@@ -305,6 +343,85 @@ export class Account {
 			const status = await this.renewStatus(renewStatusArgs)
 
 			if (status == AccountRenewStatus.PAID) {
+				resolveDone()
+			}
+			else {
+				iTime *= 2
+				if (iTime > 10) {
+					iTime = 10
+				}
+				setTimeout(iFn, iTime * 1000)
+			}
+		}
+
+		setTimeout(iFn, iTime)
+
+		await done
+	}
+
+
+
+	async upgradeStatus ({ fileIDs, metadataKeys }: AccountUpgradeStatusArgs): Promise<AccountUpgradeStatus> {
+		const payload = await getPayload<AccountUpgradeStatusPayload>({
+			crypto: this.config.crypto,
+			payload: {
+				fileHandles: fileIDs.map((id) => bytesToHex(id)),
+				metadataKeys: metadataKeys.map((key) => bytesToB64URL(key)),
+			},
+		})
+		const res = await this.config.net.POST<AccountUpgradeStatusRes>(
+			this.config.storageNode + "/api/v2/upgrade",
+			undefined,
+			JSON.stringify(payload),
+			(body) => new Response(body).json(),
+		)
+
+		if (!res.ok || !res.data.status) {
+			throw new Error("Error getting upgrade status")
+		}
+
+		return res.data.status
+	}
+
+	async upgradeAccount ({ size, duration = 12 }: AccountUpgradeArgs): Promise<AccountUpgradeInvoice> {
+		try {
+			const info = await this.info()
+
+			if (info.invoice) {
+				return info.invoice
+			}
+		} catch {}
+
+		const payload = await getPayload<AccountUpgradePayload>({
+			crypto: this.config.crypto,
+			payload: {
+				storageLimit: size,
+				durationInMonths: duration,
+			},
+		})
+		const res = await this.config.net.POST<AccountUpgradeRes>(
+			this.config.storageNode + "/api/v2/upgrade/invoice",
+			undefined,
+			JSON.stringify(payload),
+			(body) => new Response(body).json(),
+		)
+
+		if (!res.ok || !res.data.opctInvoice) {
+			throw new Error("Error getting upgrade invoice")
+		}
+
+		return res.data.opctInvoice
+	}
+
+	async waitForUpgradePayment (UpgradeStatusArgs: AccountUpgradeStatusArgs): Promise<void> {
+		const [done, resolveDone] = extractPromise<void>()
+
+		let iTime = 2
+
+		const iFn = async () => {
+			const status = await this.upgradeStatus(UpgradeStatusArgs)
+
+			if (status == AccountUpgradeStatus.PAID) {
 				resolveDone()
 			}
 			else {
