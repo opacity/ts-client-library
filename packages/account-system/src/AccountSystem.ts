@@ -8,6 +8,7 @@ import { bytesToHex } from "@opacity/util/src/hex"
 import { cleanPath, isPathChild } from "@opacity/util/src/path"
 import { entropyToKey } from "@opacity/util/src/mnemonic"
 import { MetadataAccess } from "./MetadataAccess"
+import { arrayMerge } from "@opacity/util/src/arrayMerge"
 
 export type FilesIndexEntry = {
 	location: Uint8Array
@@ -1243,11 +1244,10 @@ export class AccountSystem {
 		}
 	}
 
-	async getShared (handle: Uint8Array, markCacheDirty = false): Promise<ShareMetadata> {
-		// console.log("getShared(", handle, ")")
+	async getShared (locationKey: Uint8Array, encryptionKey: Uint8Array, markCacheDirty = false): Promise<ShareMetadata> {
+		// console.log("getShared(", locationKey, encryptionKey, ")")
 
-		const locationKey = handle.slice(0, 32)
-		const encryptionKey = handle.slice(32)
+		const handle = arrayMerge(locationKey, encryptionKey)
 
 		const shareMeta = await this.config.metadataAccess.getPublic<ShareMetadata>(
 			locationKey,
