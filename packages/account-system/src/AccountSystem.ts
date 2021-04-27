@@ -65,6 +65,7 @@ export type FolderMetadata = {
 export type ShareIndexEntry = {
 	locationKey: Uint8Array
 	encryptionKey: Uint8Array
+	fileLocations: Uint8Array[]
 }
 
 export type ShareIndex = { shared: ShareIndexEntry[] }
@@ -1162,8 +1163,25 @@ export class AccountSystem {
 			shared: sharedIndex.shared.map((shareEntry) => ({
 				locationKey: unfreezeUint8Array(shareEntry.locationKey),
 				encryptionKey: unfreezeUint8Array(shareEntry.encryptionKey),
+				fileLocations: shareEntry.fileLocations.map((l) => unfreezeUint8Array(l)),
 			})),
 		}
+	}
+
+	async getSharesByHandle (handle: Uint8Array, markCacheDirty = false) {
+		// console.log("getSharesByHandle(", handle, ")")
+
+		return await this._m.runExclusive(() => this._getSharesByHandle(handle, markCacheDirty))
+	}
+
+	async _getSharesByHandle (handle: Uint8Array, markCacheDirty = false): Promise<ShareIndexEntry[]> {
+		// console.log("_getSharesByHandle(", handle, ")")
+
+		const fileLocation = handle.slice(0, 32)
+
+		const shareIndex = await this.getShareIndex(markCacheDirty)
+
+		return shareIndex.shared.filter((share) => share.fileLocations.findIndex((l) => arraysEqual(fileLocation, l)) != -1)
 	}
 
 	async share (filesInit: ShareFileMetadataInit[], markCacheDirty = false): Promise<ShareMetadata> {
@@ -1208,6 +1226,7 @@ export class AccountSystem {
 				doc.shared.push({
 					locationKey,
 					encryptionKey,
+					fileLocations: files.map((f) => f.handle.slice(0, 32)),
 				})
 			},
 			markCacheDirty,
