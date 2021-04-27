@@ -1169,7 +1169,7 @@ export class AccountSystem {
 	//////////// Share ////////////
 	///////////////////////////////
 
-	getShareHandle (meta: ShareMetadata): Uint8Array {
+	getShareHandle (meta: ShareMetadata | ShareIndexEntry): Uint8Array {
 		return new Uint8Array(Array.from(meta.locationKey).concat(Array.from(meta.encryptionKey)))
 	}
 
