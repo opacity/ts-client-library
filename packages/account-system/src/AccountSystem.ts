@@ -27,9 +27,16 @@ export type FileCreationMetadata = {
 	type: string
 }
 
+export type FilePrivateInfo = {
+	handle?: Uint8Array
+}
+
+export type FilePublicInfo = {
+	shortLinks: Uint8Array[]
+}
+
 export type FileMetadata = {
 	location: Uint8Array
-	handle: Uint8Array
 	name: string
 	folderDerive: Uint8Array
 	size: number
@@ -37,7 +44,8 @@ export type FileMetadata = {
 	modified: number
 	type: string
 	finished: boolean
-	public: boolean
+	private: FilePrivateInfo
+	public: FilePublicInfo
 }
 
 export type FoldersIndexEntry = {
@@ -65,7 +73,8 @@ export type FolderMetadata = {
 export type ShareIndexEntry = {
 	locationKey: Uint8Array
 	encryptionKey: Uint8Array
-	fileLocations: Uint8Array[]
+	fileHandles: Uint8Array[]
+	fileShortLinks: Uint8Array[]
 }
 
 export type ShareIndex = { shared: ShareIndexEntry[] }
@@ -83,7 +92,6 @@ export type ShareFileMetadataInit = {
 }
 
 export type ShareFileMetadata = {
-	handle: Uint8Array
 	name: string
 	path: string
 	size: number
@@ -91,7 +99,8 @@ export type ShareFileMetadata = {
 	modified: number
 	type: string
 	finished: boolean
-	public: boolean
+	private: FilePrivateInfo
+	public: FilePublicInfo
 }
 
 export type ShareMetadata = {
@@ -303,7 +312,6 @@ export class AccountSystem {
 
 		return {
 			location: unfreezeUint8Array(doc.location),
-			handle: unfreezeUint8Array(doc.handle),
 			name: doc.name,
 			folderDerive: unfreezeUint8Array(doc.folderDerive),
 			size: doc.size,
@@ -311,7 +319,12 @@ export class AccountSystem {
 			modified: doc.modified,
 			type: doc.type,
 			finished: !!doc.finished,
-			public: !!doc.public,
+			private: {
+				handle: doc?.private?.handle && unfreezeUint8Array(doc.private.handle),
+			},
+			public: {
+				shortLinks: doc.public.shortLinks.map((s) => unfreezeUint8Array(s)),
+			},
 		}
 	}
 
@@ -372,7 +385,6 @@ export class AccountSystem {
 			`Init file metadata for "${bytesToB64URL(location)}"`,
 			(doc) => {
 				doc.location = location
-				doc.handle = handle
 				doc.name = filename
 				doc.folderDerive = folderDerive
 				doc.modified = meta.lastModified
@@ -380,14 +392,18 @@ export class AccountSystem {
 				doc.type = meta.type
 				doc.uploaded = Date.now()
 				doc.finished = false
-				doc.public = pub
+				doc.private = {
+					handle: handle
+				}
+				doc.public = {
+					shortLinks: []
+				}
 			},
 			markCacheDirty,
 		)
 
 		return {
 			location: unfreezeUint8Array(file.location),
-			handle: unfreezeUint8Array(file.handle),
 			name: file.name,
 			folderDerive: unfreezeUint8Array(file.folderDerive),
 			size: file.size,
@@ -395,7 +411,12 @@ export class AccountSystem {
 			modified: file.modified,
 			type: file.type,
 			finished: !!file.finished,
-			public: !!file.public,
+			private: {
+				handle: file?.private?.handle && unfreezeUint8Array(file.private.handle),
+			},
+			public: {
+				shortLinks: file.public.shortLinks.map((s) => unfreezeUint8Array(s)),
+			},
 		}
 	}
 
@@ -499,7 +520,6 @@ export class AccountSystem {
 
 		return {
 			location: unfreezeUint8Array(fileMeta.location),
-			handle: unfreezeUint8Array(fileMeta.handle),
 			name: fileMeta.name,
 			folderDerive: unfreezeUint8Array(fileMeta.folderDerive),
 			size: fileMeta.size,
@@ -507,7 +527,12 @@ export class AccountSystem {
 			modified: fileMeta.modified,
 			type: fileMeta.type,
 			finished: !!fileMeta.finished,
-			public: !!fileMeta.public,
+			private: {
+				handle: fileMeta?.private?.handle && unfreezeUint8Array(fileMeta.private.handle)
+			},
+			public: {
+				shortLinks: fileMeta.public.shortLinks.map((s) => unfreezeUint8Array(s)),
+			},
 		}
 	}
 
@@ -577,7 +602,6 @@ export class AccountSystem {
 
 		return {
 			location: unfreezeUint8Array(newFileMeta.location),
-			handle: unfreezeUint8Array(newFileMeta.handle),
 			name: newFileMeta.name,
 			folderDerive: unfreezeUint8Array(newFileMeta.folderDerive),
 			size: newFileMeta.size,
@@ -585,7 +609,12 @@ export class AccountSystem {
 			modified: newFileMeta.modified,
 			type: newFileMeta.type,
 			finished: !!newFileMeta.finished,
-			public: !!newFileMeta.public,
+			private: {
+				handle: newFileMeta?.private?.handle && unfreezeUint8Array(newFileMeta.private.handle),
+			},
+			public: {
+				shortLinks: newFileMeta.public.shortLinks.map((s) => unfreezeUint8Array(s)),
+			},
 		}
 	}
 	async removeFile (location: Uint8Array, markCacheDirty = false) {
@@ -1163,7 +1192,8 @@ export class AccountSystem {
 			shared: sharedIndex.shared.map((shareEntry) => ({
 				locationKey: unfreezeUint8Array(shareEntry.locationKey),
 				encryptionKey: unfreezeUint8Array(shareEntry.encryptionKey),
-				fileLocations: shareEntry.fileLocations.map((l) => unfreezeUint8Array(l)),
+				fileHandles: shareEntry.fileHandles.map((h) => unfreezeUint8Array(h)),
+				fileShortLinks: shareEntry.fileShortLinks.map((sl) => unfreezeUint8Array(sl)),
 			})),
 		}
 	}
@@ -1177,11 +1207,9 @@ export class AccountSystem {
 	async _getSharesByHandle (handle: Uint8Array, markCacheDirty = false): Promise<ShareIndexEntry[]> {
 		// console.log("_getSharesByHandle(", handle, ")")
 
-		const fileLocation = handle.slice(0, 32)
-
 		const shareIndex = await this._getShareIndex(markCacheDirty)
 
-		return shareIndex.shared.filter((share) => share.fileLocations.findIndex((l) => arraysEqual(fileLocation, l)) != -1)
+		return shareIndex.shared.filter((share) => share.fileHandles.findIndex((h) => arraysEqual(handle, h)) != -1)
 	}
 
 	async share (filesInit: ShareFileMetadataInit[], markCacheDirty = false): Promise<ShareMetadata> {
@@ -1199,7 +1227,6 @@ export class AccountSystem {
 					const meta = await this._getFileMetadata(fileInit.location, markCacheDirty)
 
 					return {
-						handle: meta.handle,
 						modified: meta.modified,
 						uploaded: meta.uploaded,
 						name: meta.name,
@@ -1207,7 +1234,8 @@ export class AccountSystem {
 						size: meta.size,
 						type: meta.type,
 						finished: !!meta.finished,
-						public: !!meta.public,
+						private: meta.private,
+						public: meta.public,
 					}
 				},
 			),
@@ -1226,7 +1254,8 @@ export class AccountSystem {
 				doc.shared.push({
 					locationKey,
 					encryptionKey,
-					fileLocations: files.map((f) => f.handle.slice(0, 32)),
+					fileHandles: files.map((f) => f.private.handle!).filter(Boolean),
+					fileShortLinks: files.map((f) => f.public.shortLinks).flat(),
 				})
 			},
 			markCacheDirty,
@@ -1250,7 +1279,6 @@ export class AccountSystem {
 			encryptionKey: unfreezeUint8Array(shareMeta.encryptionKey),
 			dateShared: shareMeta.dateShared,
 			files: shareMeta.files.map((file) => ({
-				handle: unfreezeUint8Array(file.handle),
 				name: file.name,
 				path: file.path,
 				size: file.size,
@@ -1258,7 +1286,12 @@ export class AccountSystem {
 				modified: file.modified,
 				type: file.type,
 				finished: !!file.finished,
-				public: !!file.public,
+				private: {
+					handle: file?.private?.handle && unfreezeUint8Array(file.private.handle),
+				},
+				public: {
+					shortLinks: file.public.shortLinks.map((sl) => unfreezeUint8Array(sl)),
+				},
 			})),
 		}
 	}
@@ -1283,7 +1316,6 @@ export class AccountSystem {
 			encryptionKey: unfreezeUint8Array(shareMeta.encryptionKey),
 			dateShared: shareMeta.dateShared,
 			files: shareMeta.files.map((file) => ({
-				handle: unfreezeUint8Array(file.handle),
 				name: file.name,
 				path: file.path,
 				size: file.size,
@@ -1291,7 +1323,12 @@ export class AccountSystem {
 				modified: file.modified,
 				type: file.type,
 				finished: !!file.finished,
-				public: !!file.public,
+				private: {
+					handle: file?.private?.handle && unfreezeUint8Array(file.private.handle),
+				},
+				public: {
+					shortLinks: file.public.shortLinks.map((sl) => unfreezeUint8Array(sl)),
+				},
 			})),
 		}
 	}
