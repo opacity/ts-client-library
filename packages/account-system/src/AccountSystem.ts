@@ -1179,7 +1179,7 @@ export class AccountSystem {
 
 		const fileLocation = handle.slice(0, 32)
 
-		const shareIndex = await this.getShareIndex(markCacheDirty)
+		const shareIndex = await this._getShareIndex(markCacheDirty)
 
 		return shareIndex.shared.filter((share) => share.fileLocations.findIndex((l) => arraysEqual(fileLocation, l)) != -1)
 	}
