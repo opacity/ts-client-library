@@ -4,13 +4,14 @@ import { extractPromise } from "@opacity/util/src/promise"
 import { FileSystemObject } from "./filesystem-object"
 import { Download } from "./download"
 import { Upload } from "./upload"
+import { arrayMerge } from "@opacity/util/src/arrayMerge"
 
 export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Upload) => {
 	const [fileMetadata, resolveFileMetadata] = extractPromise<FileMetadata>()
 
 	u._beforeUpload = async (u) => {
 		const file = await accountSystem.addUpload(
-			new Uint8Array(Array.from(u._location!).concat(Array.from(u._key!))),
+			arrayMerge(await u.getLocation(), await u.getEncryptionKey()),
 			u._path,
 			u._name,
 			u._metadata,

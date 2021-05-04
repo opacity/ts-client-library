@@ -13,8 +13,9 @@ import {
 	DownloadStartedEvent,
 	IDownloadEvents,
 } from "./events"
+import { Downloader } from "@opacity/filesystem-access/src/downloader"
 import { extractPromise } from "@opacity/util/src/promise"
-import { FileMeta } from "./filemeta"
+import { FileMeta } from "@opacity/filesystem-access/src/filemeta"
 import { OQ } from "@opacity/util/src/oqueue"
 import {
 	polyfillReadableStreamIfNeeded,
@@ -24,6 +25,7 @@ import {
 } from "@opacity/util/src/streams"
 import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
+import { Mutex } from "async-mutex"
 
 export type DownloadConfig = {
 	storageNode: string
@@ -40,13 +42,24 @@ export type DownloadConfig = {
 export type DownloadArgs = {
 	config: DownloadConfig
 	handle: Uint8Array
+	name: string
 }
 
-export class Download extends EventTarget implements IDownloadEvents {
+export class Download extends EventTarget implements Downloader, IDownloadEvents {
 	config: DownloadConfig
 
-	_location: Uint8Array
-	_key: Uint8Array
+	_m = new Mutex()
+
+	_location = extractPromise<Uint8Array>()
+	_encryptionKey = extractPromise<Uint8Array>()
+
+	async getLocation (): Promise<Uint8Array> {
+		return this._location[0]
+	}
+
+	async getEncryptionKey (): Promise<Uint8Array> {
+		return this._encryptionKey[0]
+	}
 
 	_cancelled = false
 	_errored = false
@@ -66,6 +79,9 @@ export class Download extends EventTarget implements IDownloadEvents {
 	get done () {
 		return this._done
 	}
+	get paused () {
+		return this._paused
+	}
 
 	_unpaused = Promise.resolve()
 	_unpause?: (value: void) => void
@@ -73,6 +89,12 @@ export class Download extends EventTarget implements IDownloadEvents {
 	_finished: Promise<void>
 	_resolve: (value?: void) => void
 	_reject: (reason?: any) => void
+
+	_name: string
+
+	get name () {
+		return this._name
+	}
 
 	_size?: number
 	_sizeOnFS?: number
@@ -94,16 +116,34 @@ export class Download extends EventTarget implements IDownloadEvents {
 
 	_output?: ReadableStream<Uint8Array>
 
+	get output () {
+		return this._output
+	}
+
 	_timestamps: { start?: number; end?: number; pauseDuration: number } = {
 		start: undefined,
 		end: undefined,
 		pauseDuration: 0,
 	}
 
+	get startTime () {
+		return this._timestamps.start
+	}
+	get endTime () {
+		return this._timestamps.end
+	}
+	get pauseDuration () {
+		return this._timestamps.pauseDuration
+	}
+
 	_beforeDownload?: (d: Download) => Promise<void>
 	_afterDownload?: (d: Download) => Promise<void>
 
-	pause () {
+	async pause () {
+		if (this._paused) {
+			return
+		}
+
 		const t = Date.now()
 
 		const [unpaused, unpause] = extractPromise()
@@ -112,16 +152,18 @@ export class Download extends EventTarget implements IDownloadEvents {
 			this._timestamps.pauseDuration += Date.now() - t
 			unpause()
 		}
+		this._paused = true
 	}
 
-	unpause () {
+	async unpause () {
 		if (this._unpause) {
 			this._unpause()
 			this._unpause = undefined
+			this._paused = false
 		}
 	}
 
-	constructor ({ config, handle }: DownloadArgs) {
+	constructor ({ config, handle, name }: DownloadArgs) {
 		super()
 
 		this.config = config
@@ -129,8 +171,10 @@ export class Download extends EventTarget implements IDownloadEvents {
 		this.config.queueSize.net = this.config.queueSize.net || 3
 		this.config.queueSize.decrypt = this.config.queueSize.decrypt || blocksPerPart
 
-		this._location = handle.slice(0, 32)
-		this._key = handle.slice(32)
+		this._location[1](handle.slice(0, 32))
+		this._encryptionKey[1](handle.slice(32))
+
+		this._name = name
 
 		const d = this
 
@@ -157,69 +201,73 @@ export class Download extends EventTarget implements IDownloadEvents {
 		}
 	}
 
-	async downloadUrl (): Promise<string | undefined> {
-		if (this._downloadUrl) {
-			return this._downloadUrl
-		}
+	async getDownloadUrl (): Promise<string | undefined> {
+		return this._m.runExclusive(async () => {
+			if (this._downloadUrl) {
+				return this._downloadUrl
+			}
 
-		const d = this
+			const d = this
 
-		const downloadUrlRes = await d.config.net
-			.POST(
-				d.config.storageNode + "/api/v1/download",
-				undefined,
-				JSON.stringify({ fileID: bytesToHex(d._location) }),
-				async (b) => JSON.parse(new TextDecoder("utf8").decode(await new Response(b).arrayBuffer())).fileDownloadUrl,
-			)
-			.catch(d._reject)
+			const downloadUrlRes = await d.config.net
+				.POST(
+					d.config.storageNode + "/api/v1/download",
+					undefined,
+					JSON.stringify({ fileID: bytesToHex(await d.getLocation()) }),
+					async (b) => JSON.parse(new TextDecoder("utf8").decode(await new Response(b).arrayBuffer())).fileDownloadUrl,
+				)
+				.catch(d._reject)
 
-		if (!downloadUrlRes) {
-			return
-		}
+			if (!downloadUrlRes) {
+				return
+			}
 
-		const downloadUrl = downloadUrlRes.data
+			const downloadUrl = downloadUrlRes.data
 
-		this._downloadUrl = downloadUrl
+			this._downloadUrl = downloadUrl
 
-		return downloadUrl
+			return downloadUrl
+		})
 	}
 
-	async metadata (): Promise<FileMeta | undefined> {
-		if (this._metadata) {
-			return this._metadata
-		}
+	async getMetadata (): Promise<FileMeta | undefined> {
+		return this._m.runExclusive(async () => {
+			if (this._metadata) {
+				return this._metadata
+			}
 
-		const d = this
+			const d = this
 
-		if (!this._downloadUrl) {
-			await this.downloadUrl()
-		}
+			if (!this._downloadUrl) {
+				await this.getDownloadUrl()
+			}
 
-		const metadataRes = await d.config.net
-			.GET(
-				this._downloadUrl + "/metadata",
-				undefined,
-				undefined,
-				async (b) =>
-					await serializeEncrypted<FileMeta>(
-						d.config.crypto,
-						new Uint8Array(await new Response(b).arrayBuffer()),
-						d._key,
-					),
-			)
-			.catch(d._reject)
+			const metadataRes = await d.config.net
+				.GET(
+					this._downloadUrl + "/metadata",
+					undefined,
+					undefined,
+					async (b) =>
+						await serializeEncrypted<FileMeta>(
+							d.config.crypto,
+							new Uint8Array(await new Response(b).arrayBuffer()),
+							await d.getEncryptionKey(),
+						),
+				)
+				.catch(d._reject)
 
-		if (!metadataRes) {
-			return
-		}
+			if (!metadataRes) {
+				return
+			}
 
-		const metadata = metadataRes.data
-		// old uploads will not have this defined
-		metadata.lastModified = metadata.lastModified || Date.now()
-		d._metadata = metadata
-		this.dispatchEvent(new DownloadMetadataEvent({ metadata }))
+			const metadata = metadataRes.data
+			// old uploads will not have this defined
+			metadata.lastModified = metadata.lastModified || Date.now()
+			d._metadata = metadata
+			this.dispatchEvent(new DownloadMetadataEvent({ metadata }))
 
-		return metadata
+			return metadata
+		})
 	}
 
 	async start (): Promise<ReadableStream<Uint8Array> | undefined> {
@@ -251,12 +299,12 @@ export class Download extends EventTarget implements IDownloadEvents {
 			await this._beforeDownload(d)
 		}
 
-		const downloadUrl = await d.downloadUrl().catch(d._reject)
+		const downloadUrl = await d.getDownloadUrl().catch(d._reject)
 		if (!downloadUrl) {
 			return
 		}
 
-		const metadata = await d.metadata().catch(d._reject)
+		const metadata = await d.getMetadata().catch(d._reject)
 		if (!metadata) {
 			return
 		}
@@ -357,7 +405,7 @@ export class Download extends EventTarget implements IDownloadEvents {
 													await d._unpaused
 
 													const block = part.slice(bi * blockSizeOnFS, (bi + 1) * blockSizeOnFS)
-													const decrypted = await d.config.crypto.decrypt(d._key, block).catch(d._reject)
+													const decrypted = await d.config.crypto.decrypt(await d.getEncryptionKey(), block).catch(d._reject)
 
 													if (!decrypted) {
 														return
