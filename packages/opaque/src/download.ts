@@ -1,3 +1,5 @@
+import { Mutex } from "async-mutex"
+
 import { blockSizeOnFS, numberOfBlocks, numberOfBlocksOnFS, sizeOnFS } from "@opacity/util/src/blocks"
 import { blocksPerPart, numberOfPartsOnFS, partSizeOnFS } from "@opacity/util/src/parts"
 import { bytesToHex } from "@opacity/util/src/hex"
@@ -25,7 +27,6 @@ import {
 } from "@opacity/util/src/streams"
 import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
-import { Mutex } from "async-mutex"
 
 export type DownloadConfig = {
 	storageNode: string

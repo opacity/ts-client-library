@@ -2,7 +2,7 @@ import { FileMeta } from "./filemeta"
 
 export interface Downloader {
 	getLocation (): Promise<Uint8Array>
-	getEncryptionKey (): Promise<Uint8Array>
+	getEncryptionKey (): Promise<Uint8Array | undefined>
 
 	readonly cancelled: boolean
 	readonly errored: boolean

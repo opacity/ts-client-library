@@ -10,11 +10,26 @@ import { entropyToKey } from "@opacity/util/src/mnemonic"
 import { MetadataAccess } from "./MetadataAccess"
 import { arrayMerge } from "@opacity/util/src/arrayMerge"
 
+export type FilePrivateInfo = {
+	// 64 bytes
+	handle?: Uint8Array
+}
+
+export type FilePublicInfo = {
+	// 32 bytes
+	location?: Uint8Array
+	shortLinks: Uint8Array[]
+}
+
+export type FilePublicInfoMinimal = {
+	location?: Uint8Array
+}
+
 export type FilesIndexEntry = {
 	location: Uint8Array
 	finished: boolean
-	public: boolean
-	handle: Uint8Array
+	private: FilePrivateInfo
+	public: FilePublicInfoMinimal
 	deleted: boolean
 	errored: boolean
 }
@@ -25,14 +40,6 @@ export type FileCreationMetadata = {
 	size: number
 	lastModified: number
 	type: string
-}
-
-export type FilePrivateInfo = {
-	handle?: Uint8Array
-}
-
-export type FilePublicInfo = {
-	shortLinks: Uint8Array[]
 }
 
 export type FileMetadata = {
@@ -71,8 +78,11 @@ export type FolderMetadata = {
 }
 
 export type ShareIndexEntry = {
+	// 32 bytes
 	locationKey: Uint8Array
+	// 32 bytes
 	encryptionKey: Uint8Array
+	// 32 bytes []
 	fileHandles: Uint8Array[]
 	fileShortLinks: Uint8Array[]
 }
@@ -100,7 +110,7 @@ export type ShareFileMetadata = {
 	type: string
 	finished: boolean
 	private: FilePrivateInfo
-	public: FilePublicInfo
+	public: FilePublicInfoMinimal
 }
 
 export type ShareMetadata = {
@@ -238,8 +248,12 @@ export class AccountSystem {
 			files: filesIndex.files.map((file) => ({
 				location: unfreezeUint8Array(file.location),
 				finished: !!file.finished,
-				public: !!file.public,
-				handle: unfreezeUint8Array(file.handle),
+				private: {
+					handle: file.private.handle ? unfreezeUint8Array(file.private.handle) : undefined,
+				},
+				public: {
+					location: file.public.location ? unfreezeUint8Array(file.public.location) : undefined,
+				},
 				deleted: !!file.deleted,
 				errored: false,
 			})),
@@ -257,7 +271,7 @@ export class AccountSystem {
 
 		const filesIndex = await this._getFilesIndex(markCacheDirty)
 
-		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.handle, handle))
+		const fileEntry = filesIndex.files.find((file) => file.private.handle && arraysEqual(file.private.handle, handle))
 
 		if (!fileEntry) {
 			throw new AccountSystemNotFoundError("file of handle", bytesToHex(handle.slice(0, 32)) + "...")
@@ -286,8 +300,12 @@ export class AccountSystem {
 		return {
 			location: fileEntry.location,
 			finished: !!fileEntry.finished,
-			public: !!fileEntry.public,
-			handle: fileEntry.handle,
+			private: {
+				handle: fileEntry.private.handle,
+			},
+			public: {
+				location: fileEntry.public.location,
+			},
 			deleted: !!fileEntry.deleted,
 			errored: !!fileEntry.errored,
 		}
@@ -323,13 +341,17 @@ export class AccountSystem {
 				handle: doc?.private?.handle && unfreezeUint8Array(doc.private.handle),
 			},
 			public: {
+				location: doc.public.location ? unfreezeUint8Array(doc.public.location) : undefined,
 				shortLinks: doc.public.shortLinks.map((s) => unfreezeUint8Array(s)),
 			},
 		}
 	}
 
 	async addUpload (
-		handle: Uint8Array,
+		// 32 bytes
+		fileLocation: Uint8Array,
+		// 32 bytes
+		fileEncryptionKey: Uint8Array,
 		path: string,
 		filename: string,
 		meta: FileCreationMetadata,
@@ -338,11 +360,12 @@ export class AccountSystem {
 	): Promise<FileMetadata> {
 		// console.log("addUpload(", handle, path, filename, meta, pub, ")")
 
-		return await this._m.runExclusive(() => this._addUpload(handle, path, filename, meta, pub, markCacheDirty))
+		return await this._m.runExclusive(() => this._addUpload(fileLocation, fileEncryptionKey, path, filename, meta, pub, markCacheDirty))
 	}
 
 	async _addUpload (
-		handle: Uint8Array,
+		fileLocation: Uint8Array,
+		fileEncryptionKey: Uint8Array,
 		path: string,
 		filename: string,
 		meta: FileCreationMetadata,
@@ -358,21 +381,27 @@ export class AccountSystem {
 		const folder = await this._addFolder(path, markCacheDirty)
 		const folderDerive = folder.location
 
-		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
-		const filePath = this.getFileDerivePath(location)
+		const metaLocation = await this.config.metadataAccess.config.crypto.getRandomValues(32)
+		const filePath = this.getFileDerivePath(metaLocation)
+
+		const fileHandle = arrayMerge(fileLocation, fileEncryptionKey)
 
 		await this.config.metadataAccess.change<FilesIndex>(
 			this.indexes.files,
-			`Add file "${bytesToB64URL(location)}" to file index`,
+			`Add file "${bytesToB64URL(metaLocation)}" to file index`,
 			(doc) => {
 				if (!doc.files) {
 					doc.files = []
 				}
 				doc.files.push({
-					location,
+					location: metaLocation,
 					finished: false,
-					public: pub,
-					handle,
+					private: {
+						handle: pub ? undefined : fileHandle,
+					},
+					public: {
+						location: pub ? fileLocation : undefined,
+					},
 					deleted: false,
 					errored: false,
 				})
@@ -382,9 +411,9 @@ export class AccountSystem {
 
 		const file = await this.config.metadataAccess.change<FileMetadata>(
 			filePath,
-			`Init file metadata for "${bytesToB64URL(location)}"`,
+			`Init file metadata for "${bytesToB64URL(metaLocation)}"`,
 			(doc) => {
-				doc.location = location
+				doc.location = metaLocation
 				doc.name = filename
 				doc.folderDerive = folderDerive
 				doc.modified = meta.lastModified
@@ -393,10 +422,11 @@ export class AccountSystem {
 				doc.uploaded = Date.now()
 				doc.finished = false
 				doc.private = {
-					handle: handle
+					handle: pub ? undefined: fileHandle
 				}
 				doc.public = {
-					shortLinks: []
+					location: pub ? fileLocation : undefined,
+					shortLinks: [],
 				}
 			},
 			markCacheDirty,
