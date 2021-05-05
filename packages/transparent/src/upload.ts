@@ -278,17 +278,6 @@ export class TransparentUpload extends EventTarget implements Uploader, IUploadE
 			await this._beforeUpload(u).catch(u._reject)
 		}
 
-		const encryptedMeta = await u.config.crypto.encrypt(
-			await u.getEncryptionKey(),
-			new TextEncoder().encode(
-				JSON.stringify({
-					lastModified: u._metadata.lastModified,
-					size: u._metadata.size,
-					type: u._metadata.type,
-				} as FileMeta),
-			),
-		)
-
 		const fd = await getPayloadFD<UploadInitPayload, UploadInitExtraPayload>({
 			crypto: u.config.crypto,
 			payload: {
@@ -297,7 +286,11 @@ export class TransparentUpload extends EventTarget implements Uploader, IUploadE
 				endIndex: numberOfParts(u._size),
 			},
 			extraPayload: {
-				metadata: encryptedMeta,
+				metadata: new TextEncoder().encode(JSON.stringify(JSON.stringify({
+					lastModified: u._metadata.lastModified,
+					size: u._metadata.size,
+					type: u._metadata.type,
+				} as FileMeta))),
 			},
 		})
 

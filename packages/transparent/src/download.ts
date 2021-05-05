@@ -20,7 +20,6 @@ import {
 import { numberOfParts, partSize } from "@opacity/util/src/parts"
 import { OQ } from "@opacity/util/src/oqueue"
 import { polyfillReadableStreamIfNeeded, ReadableStream, WritableStream } from "@opacity/util/src/streams"
-import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 
 export type TransparentDownloadConfig = {
 	storageNode: string
@@ -239,12 +238,7 @@ export class TransparentDownload extends EventTarget
 					this._downloadUrl + "/metadata",
 					undefined,
 					undefined,
-					async (b) =>
-						await serializeEncrypted<FileMeta>(
-							d.config.crypto,
-							new Uint8Array(await new Response(b).arrayBuffer()),
-							await d.getEncryptionKey(),
-						),
+					async (b) => JSON.parse(await new Response(b).text()) as FileMeta
 				)
 				.catch(d._reject)
 
@@ -289,44 +283,6 @@ export class TransparentDownload extends EventTarget
 		return downloadUrl
 	}
 
-	async metadata (): Promise<FileMeta | undefined> {
-		if (this._metadata) {
-			return this._metadata
-		}
-
-		const d = this
-
-		if (!this._downloadUrl) {
-			await this.downloadUrl()
-		}
-
-		const metadataRes = await d.config.net
-			.GET(
-				this._downloadUrl + "/metadata",
-				undefined,
-				undefined,
-				async (b) =>
-					await serializeEncrypted<FileMeta>(
-						d.config.crypto,
-						new Uint8Array(await new Response(b).arrayBuffer()),
-						await d.getEncryptionKey(),
-					),
-			)
-			.catch(d._reject)
-
-		if (!metadataRes) {
-			return
-		}
-
-		const metadata = metadataRes.data
-		// old uploads will not have this defined
-		metadata.lastModified = metadata.lastModified || Date.now()
-		d._metadata = metadata
-		this.dispatchEvent(new DownloadMetadataEvent({ metadata }))
-
-		return metadata
-	}
-
 	async start (): Promise<ReadableStream<Uint8Array> | undefined> {
 		if (this._cancelled || this._errored) {
 			return
@@ -361,7 +317,7 @@ export class TransparentDownload extends EventTarget
 			return
 		}
 
-		const metadata = await d.metadata().catch(d._reject)
+		const metadata = await d.getMetadata().catch(d._reject)
 		if (!metadata) {
 			return
 		}
