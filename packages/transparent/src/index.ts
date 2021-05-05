@@ -11,9 +11,3 @@ export {
 	TransparentUploadPartFinishedEvent,
 	TransparentUploadPartStartedEvent,
 } from "./events"
-
-export {
-	bindDownloadToAccountSystem,
-	bindFileSystemObjectToAccountSystem,
-	bindUploadToAccountSystem,
-} from "./account-system-binding"

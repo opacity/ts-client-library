@@ -15,9 +15,3 @@ export {
 	OpaqueUploadPartFinishedEvent,
 	OpaqueUploadPartStartedEvent,
 } from "./events"
-
-export {
-	bindDownloadToAccountSystem,
-	bindFileSystemObjectToAccountSystem,
-	bindUploadToAccountSystem,
-} from "./account-system-binding"
