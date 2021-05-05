@@ -66,6 +66,8 @@ type UploadStatusPayload = {
 }
 
 export class TransparentUpload extends EventTarget implements Uploader, IUploadEvents, ITransparentUploadEvents {
+	readonly public = true
+
 	config: TransparentUploadConfig
 
 	_m = new Mutex()

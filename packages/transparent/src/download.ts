@@ -40,6 +40,8 @@ export type TransparentDownloadArgs = {
 
 export class TransparentDownload extends EventTarget
 	implements Downloader, IDownloadEvents, ITransparentDownloadEvents {
+	readonly public = true
+
 	config: TransparentDownloadConfig
 
 	_m = new Mutex()

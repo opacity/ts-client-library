@@ -1,6 +1,8 @@
 import { FileMeta } from "./filemeta"
 
 export interface Uploader {
+	readonly public: boolean
+
 	getLocation(): Promise<Uint8Array>
 	getEncryptionKey(): Promise<Uint8Array | undefined>
 

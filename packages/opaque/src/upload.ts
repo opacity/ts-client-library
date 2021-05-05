@@ -70,6 +70,8 @@ type UploadStatusPayload = {
 }
 
 export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents, IOpaqueUploadEvents {
+	readonly public = false
+
 	config: OpaqueUploadConfig
 
 	_m = new Mutex()

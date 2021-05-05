@@ -50,6 +50,8 @@ export type OpaqueDownloadArgs = {
 }
 
 export class OpaqueDownload extends EventTarget implements Downloader, IDownloadEvents, IOpaqueDownloadEvents {
+	readonly public = false
+
 	config: OpaqueDownloadConfig
 
 	_m = new Mutex()
