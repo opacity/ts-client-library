@@ -261,34 +261,54 @@ export class AccountSystem {
 		}
 	}
 
-	async getFileLocationByHandle (handle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
-		// console.log("getFileLocationByHandle(", handle, ")")
+	async getFileMetadataLocationByFileHandle (fileHandle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
+		// console.log("getFileMetadataLocationByFileHandle(", fileHandle, ")")
 
-		return await this._m.runExclusive(() => this._getFileLocationByHandle(handle, markCacheDirty))
+		return await this._m.runExclusive(() => this._getFileMetadataLocationByFileHandle(fileHandle, markCacheDirty))
 	}
 
-	async _getFileLocationByHandle (handle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
-		// console.log("_getFileLocationByHandle(", handle, ")")
+	async _getFileMetadataLocationByFileHandle (fileHandle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
+		// console.log("_getFileMetadataLocationByFileHandle(", fileHandle, ")")
 
 		const filesIndex = await this._getFilesIndex(markCacheDirty)
 
-		const fileEntry = filesIndex.files.find((file) => file.private.handle && arraysEqual(file.private.handle, handle))
+		const fileEntry = filesIndex.files.find((file) => file.private.handle && arraysEqual(file.private.handle, fileHandle))
 
 		if (!fileEntry) {
-			throw new AccountSystemNotFoundError("file of handle", bytesToHex(handle.slice(0, 32)) + "...")
+			throw new AccountSystemNotFoundError("file of handle", bytesToHex(fileHandle.slice(0, 32)) + "...")
 		}
 
 		return fileEntry.location
 	}
 
-	async getFileIndexEntryByLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
-		// console.log("getFileIndexEntryByLocation(", location, ")")
+	async getFileMetadataLocationByFileLocation (fileLocation: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
+		// console.log("getFileMetadataLocationByFileLocation(", fileLocation, ")")
 
-		return await this._m.runExclusive(() => this._getFileIndexEntryByLocation(location, markCacheDirty))
+		return await this._m.runExclusive(() => this._getFileMetadataLocationByFileHandle(fileLocation, markCacheDirty))
 	}
 
-	async _getFileIndexEntryByLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
-		// console.log("_getFileIndexEntryByLocation(", location, ")")
+	async _getFileMetadataLocationByFileLocation (fileLocation: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
+		// console.log("_getFileMetadataLocationByFileLocation(", fileLocation, ")")
+
+		const filesIndex = await this._getFilesIndex(markCacheDirty)
+
+		const fileEntry = filesIndex.files.find((file) => file.public.location && arraysEqual(file.public.location, fileLocation))
+
+		if (!fileEntry) {
+			throw new AccountSystemNotFoundError("file of handle", bytesToHex(fileLocation.slice(0, 32)) + "...")
+		}
+
+		return fileEntry.location
+	}
+
+	async getFileIndexEntryByFileMetadataLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
+		// console.log("getFileIndexEntryByFileMetadataLocation(", location, ")")
+
+		return await this._m.runExclusive(() => this._getFileIndexEntryByFileMetadataLocation(location, markCacheDirty))
+	}
+
+	async _getFileIndexEntryByFileMetadataLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
+		// console.log("_getFileIndexEntryByFileMetadataLocation(", location, ")")
 
 		const filesIndex = await this._getFilesIndex(markCacheDirty)
 		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.location, location))
@@ -519,7 +539,7 @@ export class AccountSystem {
 
 		validateFilename(newName)
 
-		const fileIndexEntry = await this._getFileIndexEntryByLocation(location, markCacheDirty)
+		const fileIndexEntry = await this._getFileIndexEntryByFileMetadataLocation(location, markCacheDirty)
 		if (!fileIndexEntry) {
 			throw new AccountSystemNotFoundError("file", bytesToB64URL(location))
 		}
