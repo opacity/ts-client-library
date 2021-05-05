@@ -8,14 +8,21 @@ import { FileMeta } from "@opacity/filesystem-access/src/filemeta"
 import { getPayload, getPayloadFD } from "@opacity/util/src/payload"
 import {
 	IUploadEvents,
-	UploadBlockStartedEvent,
-	UploadBlockFinishedEvent,
+	// UploadBlockStartedEvent,
+	// UploadBlockFinishedEvent,
 	UploadFinishedEvent,
 	UploadMetadataEvent,
-	UploadPartStartedEvent,
-	UploadPartFinishedEvent,
+	// UploadPartStartedEvent,
+	// UploadPartFinishedEvent,
 	UploadProgressEvent,
 	UploadStartedEvent,
+} from "@opacity/filesystem-access/src/events"
+import {
+	IOpaqueUploadEvents,
+	OpaqueUploadBlockStartedEvent,
+	OpaqueUploadBlockFinishedEvent,
+	OpaqueUploadPartStartedEvent,
+	OpaqueUploadPartFinishedEvent,
 } from "./events"
 import { numberOfPartsOnFS, partSize } from "@opacity/util/src/parts"
 import { OQ } from "@opacity/util/src/oqueue"
@@ -66,7 +73,7 @@ type UploadStatusPayload = {
 	fileHandle: string
 }
 
-export class Upload extends EventTarget implements Uploader, IUploadEvents {
+export class Upload extends EventTarget implements Uploader, IUploadEvents, IOpaqueUploadEvents {
 	config: UploadConfig
 
 	_m = new Mutex()
@@ -345,7 +352,7 @@ export class Upload extends EventTarget implements Uploader, IUploadEvents {
 				async write (part) {
 					// console.log("write part")
 
-					u.dispatchEvent(new UploadPartStartedEvent({ index: partIndex }))
+					u.dispatchEvent(new OpaqueUploadPartStartedEvent({ index: partIndex }))
 
 					const p = new Uint8Array(sizeOnFS(part.length))
 
@@ -366,7 +373,7 @@ export class Upload extends EventTarget implements Uploader, IUploadEvents {
 											return
 										}
 
-										u.dispatchEvent(new UploadBlockStartedEvent({ index: blockIndex }))
+										u.dispatchEvent(new OpaqueUploadBlockStartedEvent({ index: blockIndex }))
 
 										return await u.config.crypto.encrypt(await u.getEncryptionKey(), block)
 									},
@@ -383,7 +390,7 @@ export class Upload extends EventTarget implements Uploader, IUploadEvents {
 											byteIndex++
 										}
 
-										u.dispatchEvent(new UploadBlockFinishedEvent({ index: blockIndex }))
+										u.dispatchEvent(new OpaqueUploadBlockFinishedEvent({ index: blockIndex }))
 										u.dispatchEvent(new UploadProgressEvent({ progress: blockIndex / u._numberOfBlocks }))
 									},
 								)
@@ -425,7 +432,7 @@ export class Upload extends EventTarget implements Uploader, IUploadEvents {
 
 							// console.log(res)
 
-							u.dispatchEvent(new UploadPartFinishedEvent({ index: partIndex }))
+							u.dispatchEvent(new OpaqueUploadPartFinishedEvent({ index: partIndex }))
 
 							return p
 						},

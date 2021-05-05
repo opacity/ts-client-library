@@ -21,5 +21,8 @@
 		"start": "rm -rf ./.cache && rm -rf ./dist && npx ts-node --project ./config/tsconfig.dev.json fuse.ts",
 		"pretty": "prettierx --ignore-path ./config/.prettierxignore --config ./config/.prettierx.config.json --write .",
 		"test": "echo \"Error: run tests from root\" && exit 1"
+	},
+	"dependencies": {
+		"@opacity/util": "^0.0.41"
 	}
 }

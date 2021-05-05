@@ -1,7 +1,7 @@
 import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { getPayload } from "@opacity/util/src/payload"
-import { FileSystemObjectDeleteEvent } from "./events"
+import { FileSystemObjectDeleteEvent } from "@opacity/filesystem-access/src/events"
 
 export class DeletionError extends Error {
 	constructor (location: string, err: string) {

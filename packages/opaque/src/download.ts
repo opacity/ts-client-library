@@ -4,20 +4,23 @@ import { blockSizeOnFS, numberOfBlocks, numberOfBlocksOnFS, sizeOnFS } from "@op
 import { blocksPerPart, numberOfPartsOnFS, partSizeOnFS } from "@opacity/util/src/parts"
 import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
+import { Downloader } from "@opacity/filesystem-access/src/downloader"
 import {
-	DownloadBlockStartedEvent,
-	DownloadBlockFinishedEvent,
 	DownloadFinishedEvent,
 	DownloadMetadataEvent,
-	DownloadPartStartedEvent,
-	DownloadPartFinishedEvent,
 	DownloadProgressEvent,
 	DownloadStartedEvent,
 	IDownloadEvents,
-} from "./events"
-import { Downloader } from "@opacity/filesystem-access/src/downloader"
+} from "@opacity/filesystem-access/src/events"
 import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "@opacity/filesystem-access/src/filemeta"
+import {
+	IOpaqueDownloadEvents,
+	OpaqueDownloadBlockFinishedEvent,
+	OpaqueDownloadBlockStartedEvent,
+	OpaqueDownloadPartFinishedEvent,
+	OpaqueDownloadPartStartedEvent,
+} from "./events"
 import { OQ } from "@opacity/util/src/oqueue"
 import {
 	polyfillReadableStreamIfNeeded,
@@ -46,7 +49,7 @@ export type DownloadArgs = {
 	name: string
 }
 
-export class Download extends EventTarget implements Downloader, IDownloadEvents {
+export class Download extends EventTarget implements Downloader, IDownloadEvents, IOpaqueDownloadEvents {
 	config: DownloadConfig
 
 	_m = new Mutex()
@@ -350,7 +353,7 @@ export class Download extends EventTarget implements Downloader, IDownloadEvents
 
 						await d._unpaused
 
-						d.dispatchEvent(new DownloadPartStartedEvent({ index: partIndex }))
+						d.dispatchEvent(new OpaqueDownloadPartStartedEvent({ index: partIndex }))
 
 						const res = await d.config.net
 							.GET(
@@ -380,7 +383,7 @@ export class Download extends EventTarget implements Downloader, IDownloadEvents
 											i < Math.floor((l + chunk.length) / blockSizeOnFS);
 											i++
 										) {
-											d.dispatchEvent(new DownloadBlockStartedEvent({ index: partIndex * blocksPerPart + i }))
+											d.dispatchEvent(new OpaqueDownloadBlockStartedEvent({ index: partIndex * blocksPerPart + i }))
 										}
 
 										l += chunk.length
@@ -421,7 +424,7 @@ export class Download extends EventTarget implements Downloader, IDownloadEvents
 
 													controller.enqueue(decrypted)
 
-													d.dispatchEvent(new DownloadBlockFinishedEvent({ index: blockIndex }))
+													d.dispatchEvent(new OpaqueDownloadBlockFinishedEvent({ index: blockIndex }))
 													d.dispatchEvent(new DownloadProgressEvent({ progress: blockIndex / d._numberOfBlocks! }))
 												},
 											)
@@ -432,7 +435,7 @@ export class Download extends EventTarget implements Downloader, IDownloadEvents
 
 						await decryptQueue.waitForCommit(Math.min((partIndex + 1) * blocksPerPart, d._numberOfBlocks!) - 1)
 
-						d.dispatchEvent(new DownloadPartFinishedEvent({ index: partIndex }))
+						d.dispatchEvent(new OpaqueDownloadPartFinishedEvent({ index: partIndex }))
 					},
 					() => {},
 				)
