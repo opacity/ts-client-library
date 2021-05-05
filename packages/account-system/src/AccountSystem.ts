@@ -82,9 +82,10 @@ export type ShareIndexEntry = {
 	locationKey: Uint8Array
 	// 32 bytes
 	encryptionKey: Uint8Array
-	// 32 bytes []
+	// 64 bytes []
 	fileHandles: Uint8Array[]
-	fileShortLinks: Uint8Array[]
+	// 32 bytes []
+	fileLocations: Uint8Array[]
 }
 
 export type ShareIndex = { shared: ShareIndexEntry[] }
@@ -1223,7 +1224,7 @@ export class AccountSystem {
 				locationKey: unfreezeUint8Array(shareEntry.locationKey),
 				encryptionKey: unfreezeUint8Array(shareEntry.encryptionKey),
 				fileHandles: shareEntry.fileHandles.map((h) => unfreezeUint8Array(h)),
-				fileShortLinks: shareEntry.fileShortLinks.map((sl) => unfreezeUint8Array(sl)),
+				fileLocations: shareEntry.fileLocations.map((l) => unfreezeUint8Array(l)),
 			})),
 		}
 	}
@@ -1285,7 +1286,7 @@ export class AccountSystem {
 					locationKey,
 					encryptionKey,
 					fileHandles: files.map((f) => f.private.handle!).filter(Boolean),
-					fileShortLinks: files.map((f) => f.public.shortLinks).flat(),
+					fileLocations: files.map((f) => f.public.location).filter(Boolean) as Uint8Array[],
 				})
 			},
 			markCacheDirty,
@@ -1320,7 +1321,7 @@ export class AccountSystem {
 					handle: file?.private?.handle && unfreezeUint8Array(file.private.handle),
 				},
 				public: {
-					shortLinks: file.public.shortLinks.map((sl) => unfreezeUint8Array(sl)),
+					location: file?.public?.location && unfreezeUint8Array(file.public.location),
 				},
 			})),
 		}
@@ -1357,7 +1358,7 @@ export class AccountSystem {
 					handle: file?.private?.handle && unfreezeUint8Array(file.private.handle),
 				},
 				public: {
-					shortLinks: file.public.shortLinks.map((sl) => unfreezeUint8Array(sl)),
+					location: file?.public?.location && unfreezeUint8Array(file.public.location),
 				},
 			})),
 		}
