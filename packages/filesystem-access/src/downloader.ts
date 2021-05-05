@@ -1,8 +1,8 @@
 import { FileMeta } from "./filemeta"
 
 export interface Downloader {
-	getLocation (): Promise<Uint8Array>
-	getEncryptionKey (): Promise<Uint8Array | undefined>
+	getLocation(): Promise<Uint8Array>
+	getEncryptionKey(): Promise<Uint8Array | undefined>
 
 	readonly cancelled: boolean
 	readonly errored: boolean
@@ -15,8 +15,8 @@ export interface Downloader {
 	readonly size: number | undefined
 	readonly sizeOnFS: number | undefined
 
-	getDownloadUrl (): Promise<string | undefined>
-	getMetadata (): Promise<FileMeta | undefined>
+	getDownloadUrl(): Promise<string | undefined>
+	getMetadata(): Promise<FileMeta | undefined>
 
 	readonly output: ReadableStream<Uint8Array> | undefined
 
@@ -27,11 +27,11 @@ export interface Downloader {
 	_beforeDownload?: (d: this) => Promise<void>
 	_afterDownload?: (d: this) => Promise<void>
 
-	pause (): Promise<void>
-	unpause (): Promise<void>
+	pause(): Promise<void>
+	unpause(): Promise<void>
 
-	start (): Promise<ReadableStream<Uint8Array> | undefined>
-	finish (): Promise<void>
+	start(): Promise<ReadableStream<Uint8Array> | undefined>
+	finish(): Promise<void>
 
-	cancel (): Promise<void>
+	cancel(): Promise<void>
 }

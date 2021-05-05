@@ -1,14 +1,14 @@
-export { Download, DownloadArgs, DownloadConfig } from "./download"
-export { Upload, UploadArgs, UploadConfig } from "./upload"
+export { OpaqueDownload, OpaqueDownloadArgs, OpaqueDownloadConfig } from "./download"
+export { OpaqueUpload, OpaqueUploadArgs, OpaqueUploadConfig } from "./upload"
 
 export {
+	IOpaqueDownloadEvents,
+	IOpaqueUploadEvents,
 	OpaqueDownloadBlockFinishedEvent,
 	OpaqueDownloadBlockStartedEvent,
 	OpaqueDownloadEvents,
 	OpaqueDownloadPartFinishedEvent,
 	OpaqueDownloadPartStartedEvent,
-	IOpaqueDownloadEvents,
-	IOpaqueUploadEvents,
 	OpaqueUploadBlockFinishedEvent,
 	OpaqueUploadBlockStartedEvent,
 	OpaqueUploadEvents,
@@ -17,7 +17,7 @@ export {
 } from "./events"
 
 export {
-	bindFileSystemObjectToAccountSystem,
 	bindDownloadToAccountSystem,
+	bindFileSystemObjectToAccountSystem,
 	bindUploadToAccountSystem,
 } from "./account-system-binding"

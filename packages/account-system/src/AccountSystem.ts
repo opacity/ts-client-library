@@ -352,7 +352,7 @@ export class AccountSystem {
 		// 32 bytes
 		fileLocation: Uint8Array,
 		// 32 bytes
-		fileEncryptionKey: Uint8Array,
+		fileEncryptionKey: Uint8Array | undefined,
 		path: string,
 		filename: string,
 		meta: FileCreationMetadata,
@@ -361,12 +361,14 @@ export class AccountSystem {
 	): Promise<FileMetadata> {
 		// console.log("addUpload(", handle, path, filename, meta, pub, ")")
 
-		return await this._m.runExclusive(() => this._addUpload(fileLocation, fileEncryptionKey, path, filename, meta, pub, markCacheDirty))
+		return await this._m.runExclusive(() =>
+			this._addUpload(fileLocation, fileEncryptionKey, path, filename, meta, pub, markCacheDirty),
+		)
 	}
 
 	async _addUpload (
 		fileLocation: Uint8Array,
-		fileEncryptionKey: Uint8Array,
+		fileEncryptionKey: Uint8Array | undefined,
 		path: string,
 		filename: string,
 		meta: FileCreationMetadata,
@@ -385,7 +387,7 @@ export class AccountSystem {
 		const metaLocation = await this.config.metadataAccess.config.crypto.getRandomValues(32)
 		const filePath = this.getFileDerivePath(metaLocation)
 
-		const fileHandle = arrayMerge(fileLocation, fileEncryptionKey)
+		const fileHandle = fileEncryptionKey ? arrayMerge(fileLocation, fileEncryptionKey) : fileLocation
 
 		await this.config.metadataAccess.change<FilesIndex>(
 			this.indexes.files,
@@ -423,7 +425,7 @@ export class AccountSystem {
 				doc.uploaded = Date.now()
 				doc.finished = false
 				doc.private = {
-					handle: pub ? undefined: fileHandle
+					handle: pub ? undefined : fileHandle,
 				}
 				doc.public = {
 					location: pub ? fileLocation : undefined,
@@ -559,7 +561,7 @@ export class AccountSystem {
 			type: fileMeta.type,
 			finished: !!fileMeta.finished,
 			private: {
-				handle: fileMeta?.private?.handle && unfreezeUint8Array(fileMeta.private.handle)
+				handle: fileMeta?.private?.handle && unfreezeUint8Array(fileMeta.private.handle),
 			},
 			public: {
 				shortLinks: fileMeta.public.shortLinks.map((s) => unfreezeUint8Array(s)),

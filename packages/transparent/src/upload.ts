@@ -1,17 +1,14 @@
 import { Mutex } from "async-mutex"
 
-import { blockSize, blockSizeOnFS, numberOfBlocks, sizeOnFS } from "@opacity/util/src/blocks"
 import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "@opacity/filesystem-access/src/filemeta"
 import { getPayload, getPayloadFD } from "@opacity/util/src/payload"
 import {
-	IOpaqueUploadEvents,
-	OpaqueUploadBlockFinishedEvent,
-	OpaqueUploadBlockStartedEvent,
-	OpaqueUploadPartFinishedEvent,
-	OpaqueUploadPartStartedEvent,
+	ITransparentUploadEvents,
+	TransparentUploadPartFinishedEvent,
+	TransparentUploadPartStartedEvent,
 } from "./events"
 import {
 	IUploadEvents,
@@ -20,26 +17,25 @@ import {
 	UploadProgressEvent,
 	UploadStartedEvent,
 } from "@opacity/filesystem-access/src/events"
-import { numberOfPartsOnFS, partSize } from "@opacity/util/src/parts"
+import { numberOfParts, partSize } from "@opacity/util/src/parts"
 import { OQ } from "@opacity/util/src/oqueue"
 import { Retry } from "@opacity/util/src/retry"
 import { TransformStream, WritableStream, Uint8ArrayChunkStream } from "@opacity/util/src/streams"
 import { Uploader } from "@opacity/filesystem-access/src/uploader"
 
-export type OpaqueUploadConfig = {
+export type TransparentUploadConfig = {
 	storageNode: string
 
 	crypto: CryptoMiddleware
 	net: NetworkMiddleware
 
 	queueSize?: {
-		encrypt?: number
 		net?: number
 	}
 }
 
-export type OpaqueUploadArgs = {
-	config: OpaqueUploadConfig
+export type TransparentUploadArgs = {
+	config: TransparentUploadConfig
 	path: string
 	name: string
 	meta: FileMeta
@@ -69,13 +65,13 @@ type UploadStatusPayload = {
 	fileHandle: string
 }
 
-export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents, IOpaqueUploadEvents {
-	config: OpaqueUploadConfig
+export class TransparentUpload extends EventTarget implements Uploader, IUploadEvents, ITransparentUploadEvents {
+	config: TransparentUploadConfig
 
 	_m = new Mutex()
 
 	_location = extractPromise<Uint8Array>()
-	_encryptionKey = extractPromise<Uint8Array>()
+	_encryptionKey = extractPromise<Uint8Array | undefined>()
 
 	private async _generateKeys () {
 		if (this._started || (this._location && this._encryptionKey)) {
@@ -88,7 +84,7 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 			}
 
 			this._location[1](await this.config.crypto.getRandomValues(32))
-			this._encryptionKey[1](await this.config.crypto.generateSymmetricKey())
+			this._encryptionKey[1](undefined)
 		})
 	}
 
@@ -98,7 +94,7 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		return this._location[0]
 	}
 
-	async getEncryptionKey (): Promise<Uint8Array> {
+	async getEncryptionKey (): Promise<Uint8Array | undefined> {
 		await this._generateKeys()
 
 		return this._encryptionKey[0]
@@ -135,7 +131,6 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 
 	_size: number
 	_sizeOnFS: number
-	_numberOfBlocks: number
 	_numberOfParts: number
 
 	get size () {
@@ -160,7 +155,6 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 	}
 
 	_netQueue?: OQ<Uint8Array>
-	_encryptQueue?: OQ<Uint8Array>
 
 	_output?: TransformStream<Uint8Array, Uint8Array>
 
@@ -211,12 +205,11 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		}
 	}
 
-	constructor ({ config, name, path, meta }: OpaqueUploadArgs) {
+	constructor ({ config, name, path, meta }: TransparentUploadArgs) {
 		super()
 
 		this.config = config
 		this.config.queueSize = this.config.queueSize || {}
-		this.config.queueSize.encrypt = this.config.queueSize.encrypt || 3
 		this.config.queueSize.net = this.config.queueSize.net || 1
 
 		this._name = name
@@ -224,9 +217,8 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		this._metadata = meta
 
 		this._size = this._metadata.size
-		this._sizeOnFS = sizeOnFS(this._size)
-		this._numberOfBlocks = numberOfBlocks(this._size)
-		this._numberOfParts = numberOfPartsOnFS(this._sizeOnFS)
+		this._sizeOnFS = this._size
+		this._numberOfParts = numberOfParts(this._size)
 
 		const u = this
 
@@ -301,15 +293,15 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 			crypto: u.config.crypto,
 			payload: {
 				fileHandle: bytesToHex(await u.getLocation()),
-				fileSizeInByte: u._sizeOnFS,
-				endIndex: numberOfPartsOnFS(u._sizeOnFS),
+				fileSizeInByte: u._size,
+				endIndex: numberOfParts(u._size),
 			},
 			extraPayload: {
 				metadata: encryptedMeta,
 			},
 		})
 
-		await u.config.net.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(u._reject)
+		await u.config.net.POST(u.config.storageNode + "/api/v2/init-upload-public", {}, fd).catch(u._reject)
 
 		u.dispatchEvent(
 			new UploadStartedEvent({
@@ -317,13 +309,10 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 			}),
 		)
 
-		const encryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize!.encrypt, Number.MAX_SAFE_INTEGER)
 		const netQueue = new OQ<Uint8Array | undefined>(this.config.queueSize!.net)
 
-		u._encryptQueue = encryptQueue
 		u._netQueue = netQueue
 
-		let blockIndex = 0
 		let partIndex = 0
 
 		const partCollector = new Uint8ArrayChunkStream(
@@ -346,9 +335,9 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 				async write (part) {
 					// console.log("write part")
 
-					u.dispatchEvent(new OpaqueUploadPartStartedEvent({ index: partIndex }))
+					u.dispatchEvent(new TransparentUploadPartStartedEvent({ index: partIndex }))
 
-					const p = new Uint8Array(sizeOnFS(part.length))
+					const p = new Uint8Array(part.length)
 
 					netQueue.add(
 						partIndex++,
@@ -356,41 +345,6 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 							if (u._cancelled || u._errored) {
 								return
 							}
-
-							for (let i = 0; i < numberOfBlocks(part.length); i++) {
-								const block = part.slice(i * blockSize, (i + 1) * blockSize)
-
-								encryptQueue.add(
-									blockIndex++,
-									async (blockIndex) => {
-										if (u._cancelled || u._errored) {
-											return
-										}
-
-										u.dispatchEvent(new OpaqueUploadBlockStartedEvent({ index: blockIndex }))
-
-										return await u.config.crypto.encrypt(await u.getEncryptionKey(), block)
-									},
-									async (encrypted, blockIndex) => {
-										// console.log("write encrypted")
-
-										if (!encrypted) {
-											return
-										}
-
-										let byteIndex = 0
-										for (let byte of encrypted) {
-											p[i * blockSizeOnFS + byteIndex] = byte
-											byteIndex++
-										}
-
-										u.dispatchEvent(new OpaqueUploadBlockFinishedEvent({ index: blockIndex }))
-										u.dispatchEvent(new UploadProgressEvent({ progress: blockIndex / u._numberOfBlocks }))
-									},
-								)
-							}
-
-							await encryptQueue.waitForCommit(blockIndex - 1)
 
 							const res = await new Retry(
 								async () => {
@@ -406,7 +360,7 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 										},
 									})
 
-									return await u.config.net.POST(u.config.storageNode + "/api/v1/upload", {}, fd)
+									return await u.config.net.POST(u.config.storageNode + "/api/v2/upload-public", {}, fd)
 								},
 								{
 									firstTimer: 500,
@@ -426,7 +380,8 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 
 							// console.log(res)
 
-							u.dispatchEvent(new OpaqueUploadPartFinishedEvent({ index: partIndex }))
+							u.dispatchEvent(new TransparentUploadPartFinishedEvent({ index: partIndex }))
+							u.dispatchEvent(new UploadProgressEvent({ progress: partIndex / u._numberOfParts }))
 
 							return p
 						},
@@ -438,17 +393,9 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 					)
 				},
 				async close () {
-					await encryptQueue.waitForClose()
+					await netQueue.waitForClose()
 				},
 			}) as WritableStream<Uint8Array>,
-		)
-
-		encryptQueue.add(
-			numberOfBlocks(u._size),
-			() => {},
-			async () => {
-				encryptQueue.close()
-			},
 		)
 
 		netQueue.add(
@@ -462,9 +409,9 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 					},
 				})
 
-				const res = (await u.config.net
-					.POST(u.config.storageNode + "/api/v1/upload-status", {}, JSON.stringify(data))
-					.catch(u._reject)) as void
+				const res = await u.config.net
+					.POST(u.config.storageNode + "/api/v2/upload-status-public", {}, JSON.stringify(data))
+					.catch(u._reject)
 
 				// console.log(res)
 
@@ -472,7 +419,7 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 			},
 		)
 
-		Promise.all([encryptQueue.waitForClose(), netQueue.waitForClose()]).then(async () => {
+		netQueue.waitForClose().then(async () => {
 			if (this._afterUpload) {
 				await this._afterUpload(u).catch(u._reject)
 			}

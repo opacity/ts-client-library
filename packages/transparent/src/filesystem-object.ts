@@ -3,28 +3,28 @@ import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { FileSystemObjectDeleteEvent } from "@opacity/filesystem-access/src/events"
 import { getPayload } from "@opacity/util/src/payload"
 
-export class OpaqueDeletionError extends Error {
+export class TransparentDeletionError extends Error {
 	constructor (location: string, err: string) {
 		super(`DeletionError: Failed to delete "${location}". Error: "${err}"`)
 	}
 }
 
-export type OpaqueFileSystemObjectConfig = {
+export type TransparentFileSystemObjectConfig = {
 	crypto: CryptoMiddleware
 	net: NetworkMiddleware
 
 	storageNode: string
 }
 
-export class OpaqueFileSystemObject extends EventTarget {
+export class TransparentFileSystemObject extends EventTarget {
 	_handle?: Uint8Array
 
-	config: OpaqueFileSystemObjectConfig
+	config: TransparentFileSystemObjectConfig
 
-	_beforeDelete?: (o: OpaqueFileSystemObject) => Promise<void>
-	_afterDelete?: (o: OpaqueFileSystemObject) => Promise<void>
+	_beforeDelete?: (o: TransparentFileSystemObject) => Promise<void>
+	_afterDelete?: (o: TransparentFileSystemObject) => Promise<void>
 
-	constructor (handle: Uint8Array, config: OpaqueFileSystemObjectConfig) {
+	constructor (handle: Uint8Array, config: TransparentFileSystemObjectConfig) {
 		super()
 
 		this._handle = handle
@@ -83,7 +83,7 @@ export class OpaqueFileSystemObject extends EventTarget {
 		)
 
 		if (res.status != 200) {
-			throw new OpaqueDeletionError(bytesToHex(location), res.data)
+			throw new TransparentDeletionError(bytesToHex(location), res.data)
 		}
 
 		if (this._afterDelete) {

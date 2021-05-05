@@ -1,8 +1,8 @@
 import { FileMeta } from "./filemeta"
 
 export interface Uploader {
-	getLocation (): Promise<Uint8Array>
-	getEncryptionKey (): Promise<Uint8Array | undefined>
+	getLocation(): Promise<Uint8Array>
+	getEncryptionKey(): Promise<Uint8Array | undefined>
 
 	readonly cancelled: boolean
 	readonly errored: boolean
@@ -26,11 +26,11 @@ export interface Uploader {
 	_beforeUpload?: (u: this) => Promise<void>
 	_afterUpload?: (u: this) => Promise<void>
 
-	pause (): Promise<void>
-	unpause (): Promise<void>
+	pause(): Promise<void>
+	unpause(): Promise<void>
 
-	start (): Promise<TransformStream<Uint8Array, Uint8Array> | undefined>
-	finish (): Promise<void>
+	start(): Promise<TransformStream<Uint8Array, Uint8Array> | undefined>
+	finish(): Promise<void>
 
-	cancel (): Promise<void>
+	cancel(): Promise<void>
 }

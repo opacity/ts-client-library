@@ -14,7 +14,7 @@ export class DownloadMetadataEvent extends CustomEvent<DownloadMetadataEventData
 		super(DownloadEvents.METADATA, { detail: data })
 	}
 }
-type DownloadStartedEventData = { time: number; numberOfBlocks: number; numberOfParts: number }
+type DownloadStartedEventData = { time: number }
 export class DownloadStartedEvent extends CustomEvent<DownloadStartedEventData> {
 	constructor (data: DownloadStartedEventData) {
 		super(DownloadEvents.START, { detail: data })
@@ -75,7 +75,7 @@ export class UploadMetadataEvent extends CustomEvent<UploadMetadataEventData> {
 		super(UploadEvents.METADATA, { detail: data })
 	}
 }
-type UploadStartedEventData = { time: number; numberOfBlocks: number; numberOfParts: number }
+type UploadStartedEventData = { time: number }
 export class UploadStartedEvent extends CustomEvent<UploadStartedEventData> {
 	constructor (data: UploadStartedEventData) {
 		super(UploadEvents.START, { detail: data })

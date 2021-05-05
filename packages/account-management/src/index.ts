@@ -154,7 +154,7 @@ export class Account {
 		return res.data
 	}
 
-	async createSubscription ({ stripeToken = '' }: AccountStripeArgs = {}) : Promise<AccountGetRes> {
+	async createSubscription ({ stripeToken = "" }: AccountStripeArgs = {}): Promise<AccountGetRes> {
 		const payload = await getPayload({ crypto: this.config.crypto, payload: { stripeToken } })
 		const res = await this.config.net.POST(
 			this.config.storageNode + "/api/v1/stripe/create",
