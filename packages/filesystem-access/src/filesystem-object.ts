@@ -10,11 +10,11 @@ export interface IFileSystemObject {
 	readonly handle: Uint8Array | undefined
 	readonly location: Uint8Array | undefined
 
-	exists (): Promise<boolean>
+	exists(): Promise<boolean>
 
 	_beforeDelete?: (o: this) => Promise<void>
 	_afterDelete?: (o: this) => Promise<void>
-	delete (): Promise<void>
+	delete(): Promise<void>
 }
 
 export class FileSystemObjectDeletionError extends Error {
@@ -60,7 +60,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 	_beforeDelete?: (o: FileSystemObject) => Promise<void>
 	_afterDelete?: (o: FileSystemObject) => Promise<void>
 
-	constructor ({ handle, location, config}: FileSystemObjectArgs) {
+	constructor ({ handle, location, config }: FileSystemObjectArgs) {
 		super()
 
 		this._handle = handle

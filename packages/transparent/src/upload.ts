@@ -288,11 +288,15 @@ export class TransparentUpload extends EventTarget implements Uploader, IUploadE
 				endIndex: numberOfParts(u._size),
 			},
 			extraPayload: {
-				metadata: new TextEncoder().encode(JSON.stringify(JSON.stringify({
-					lastModified: u._metadata.lastModified,
-					size: u._metadata.size,
-					type: u._metadata.type,
-				} as FileMeta))),
+				metadata: new TextEncoder().encode(
+					JSON.stringify(
+						JSON.stringify({
+							lastModified: u._metadata.lastModified,
+							size: u._metadata.size,
+							type: u._metadata.type,
+						} as FileMeta),
+					),
+				),
 			},
 		})
 

@@ -272,7 +272,9 @@ export class AccountSystem {
 
 		const filesIndex = await this._getFilesIndex(markCacheDirty)
 
-		const fileEntry = filesIndex.files.find((file) => file.private.handle && arraysEqual(file.private.handle, fileHandle))
+		const fileEntry = filesIndex.files.find(
+			(file) => file.private.handle && arraysEqual(file.private.handle, fileHandle),
+		)
 
 		if (!fileEntry) {
 			throw new AccountSystemNotFoundError("file of handle", bytesToHex(fileHandle.slice(0, 32)) + "...")
@@ -292,7 +294,9 @@ export class AccountSystem {
 
 		const filesIndex = await this._getFilesIndex(markCacheDirty)
 
-		const fileEntry = filesIndex.files.find((file) => file.public.location && arraysEqual(file.public.location, fileLocation))
+		const fileEntry = filesIndex.files.find(
+			(file) => file.public.location && arraysEqual(file.public.location, fileLocation),
+		)
 
 		if (!fileEntry) {
 			throw new AccountSystemNotFoundError("file of handle", bytesToHex(fileLocation.slice(0, 32)) + "...")
@@ -301,13 +305,19 @@ export class AccountSystem {
 		return fileEntry.location
 	}
 
-	async getFileIndexEntryByFileMetadataLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
+	async getFileIndexEntryByFileMetadataLocation (
+		location: Uint8Array,
+		markCacheDirty = false,
+	): Promise<FilesIndexEntry> {
 		// console.log("getFileIndexEntryByFileMetadataLocation(", location, ")")
 
 		return await this._m.runExclusive(() => this._getFileIndexEntryByFileMetadataLocation(location, markCacheDirty))
 	}
 
-	async _getFileIndexEntryByFileMetadataLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
+	async _getFileIndexEntryByFileMetadataLocation (
+		location: Uint8Array,
+		markCacheDirty = false,
+	): Promise<FilesIndexEntry> {
 		// console.log("_getFileIndexEntryByFileMetadataLocation(", location, ")")
 
 		const filesIndex = await this._getFilesIndex(markCacheDirty)

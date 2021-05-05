@@ -359,8 +359,6 @@ export class Account {
 		await done
 	}
 
-
-
 	async upgradeStatus ({ fileIDs, metadataKeys }: AccountUpgradeStatusArgs): Promise<AccountUpgradeStatus> {
 		const payload = await getPayload<AccountUpgradeStatusPayload>({
 			crypto: this.config.crypto,

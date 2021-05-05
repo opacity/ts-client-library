@@ -240,7 +240,7 @@ export class TransparentDownload extends EventTarget
 					this._downloadUrl + "/metadata",
 					undefined,
 					undefined,
-					async (b) => JSON.parse(await new Response(b).text()) as FileMeta
+					async (b) => JSON.parse(await new Response(b).text()) as FileMeta,
 				)
 				.catch(d._reject)
 
