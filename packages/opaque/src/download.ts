@@ -142,8 +142,8 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		return this._timestamps.pauseDuration
 	}
 
-	_beforeDownload?: (d: OpaqueDownload) => Promise<void>
-	_afterDownload?: (d: OpaqueDownload) => Promise<void>
+	_beforeDownload?: (d: Downloader) => Promise<void>
+	_afterDownload?: (d: Downloader) => Promise<void>
 
 	async pause () {
 		if (this._paused) {

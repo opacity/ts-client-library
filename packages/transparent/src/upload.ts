@@ -180,8 +180,8 @@ export class TransparentUpload extends EventTarget implements Uploader, IUploadE
 		return this._timestamps.pauseDuration
 	}
 
-	_beforeUpload?: (u: this) => Promise<void>
-	_afterUpload?: (u: this) => Promise<void>
+	_beforeUpload?: (u: Uploader) => Promise<void>
+	_afterUpload?: (u: Uploader) => Promise<void>
 
 	async pause () {
 		if (this._paused) {

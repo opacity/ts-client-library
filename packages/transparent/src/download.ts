@@ -130,8 +130,8 @@ export class TransparentDownload extends EventTarget
 		return this._timestamps.pauseDuration
 	}
 
-	_beforeDownload?: (d: TransparentDownload) => Promise<void>
-	_afterDownload?: (d: TransparentDownload) => Promise<void>
+	_beforeDownload?: (d: Downloader) => Promise<void>
+	_afterDownload?: (d: Downloader) => Promise<void>
 
 	async pause () {
 		if (this._paused) {
