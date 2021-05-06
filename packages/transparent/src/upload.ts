@@ -72,34 +72,40 @@ export class TransparentUpload extends EventTarget implements Uploader, IUploadE
 
 	_m = new Mutex()
 
-	_location = extractPromise<Uint8Array>()
-	_encryptionKey = extractPromise<Uint8Array | undefined>()
+	_location?: Uint8Array
+	_encryptionKey?: Uint8Array
+
+	_locationExtractedPromise = extractPromise<Uint8Array>()
+	_encryptionKeyExtractedPromise = extractPromise<Uint8Array>()
 
 	private async _generateKeys () {
-		if (this._started || (this._location && this._encryptionKey)) {
+		if (this._location && this._encryptionKey) {
 			return
 		}
 
 		await this._m.runExclusive(async () => {
-			if (this._started || (this._location && this._encryptionKey)) {
+			if (this._location && this._encryptionKey) {
 				return
 			}
 
-			this._location[1](await this.config.crypto.getRandomValues(32))
-			this._encryptionKey[1](undefined)
+			this._location = await this.config.crypto.getRandomValues(32)
+			this._encryptionKey = await this.config.crypto.generateSymmetricKey()
+
+			this._locationExtractedPromise[1](this._location)
+			this._encryptionKeyExtractedPromise[1](this._encryptionKey)
 		})
 	}
 
 	async getLocation (): Promise<Uint8Array> {
 		await this._generateKeys()
 
-		return this._location[0]
+		return await this._locationExtractedPromise[0]
 	}
 
-	async getEncryptionKey (): Promise<Uint8Array | undefined> {
+	async getEncryptionKey (): Promise<Uint8Array> {
 		await this._generateKeys()
 
-		return this._encryptionKey[0]
+		return await this._encryptionKeyExtractedPromise[0]
 	}
 
 	_cancelled = false
