@@ -34,7 +34,7 @@ export type TransparentDownloadConfig = {
 
 export type TransparentDownloadArgs = {
 	config: TransparentDownloadConfig
-	handle: Uint8Array
+	location: Uint8Array
 	name: string
 }
 
@@ -47,13 +47,13 @@ export class TransparentDownload extends EventTarget
 	_m = new Mutex()
 
 	_location = extractPromise<Uint8Array>()
-	_encryptionKey = extractPromise<Uint8Array>()
+	_encryptionKey = extractPromise<undefined>()
 
 	async getLocation (): Promise<Uint8Array> {
 		return this._location[0]
 	}
 
-	async getEncryptionKey (): Promise<Uint8Array> {
+	async getEncryptionKey (): Promise<undefined> {
 		return this._encryptionKey[0]
 	}
 
@@ -157,15 +157,15 @@ export class TransparentDownload extends EventTarget
 		}
 	}
 
-	constructor ({ config, handle, name }: TransparentDownloadArgs) {
+	constructor ({ config, location, name }: TransparentDownloadArgs) {
 		super()
 
 		this.config = config
 		this.config.queueSize = this.config.queueSize || {}
 		this.config.queueSize.net = this.config.queueSize.net || 3
 
-		this._location[1](handle.slice(0, 32))
-		this._encryptionKey[1](handle.slice(32))
+		this._location[1](location.slice(0, 32))
+		this._encryptionKey[1](undefined)
 
 		this._name = name
 
