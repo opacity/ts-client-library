@@ -12,17 +12,17 @@ import { arrayMerge } from "@opacity/util/src/arrayMerge"
 
 export type FilePrivateInfo = {
 	// 64 bytes
-	handle?: Uint8Array
+	handle: Uint8Array | null
 }
 
 export type FilePublicInfo = {
 	// 32 bytes
-	location?: Uint8Array
+	location: Uint8Array | null
 	shortLinks: Uint8Array[]
 }
 
 export type FilePublicInfoMinimal = {
-	location?: Uint8Array
+	location: Uint8Array | null
 }
 
 export type FilesIndexEntry = {
@@ -250,10 +250,10 @@ export class AccountSystem {
 				location: unfreezeUint8Array(file.location),
 				finished: !!file.finished,
 				private: {
-					handle: file.private.handle ? unfreezeUint8Array(file.private.handle) : undefined,
+					handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
 				},
 				public: {
-					location: file.public.location ? unfreezeUint8Array(file.public.location) : undefined,
+					location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
 				},
 				deleted: !!file.deleted,
 				errored: false,
@@ -369,10 +369,10 @@ export class AccountSystem {
 			type: doc.type,
 			finished: !!doc.finished,
 			private: {
-				handle: doc?.private?.handle && unfreezeUint8Array(doc.private.handle),
+				handle: doc?.private?.handle ? unfreezeUint8Array(doc.private.handle) : null,
 			},
 			public: {
-				location: doc.public.location ? unfreezeUint8Array(doc.public.location) : undefined,
+				location: doc?.public?.location ? unfreezeUint8Array(doc.public.location) : null,
 				shortLinks: doc.public.shortLinks.map((s) => unfreezeUint8Array(s)),
 			},
 		}
@@ -430,10 +430,10 @@ export class AccountSystem {
 					location: metaLocation,
 					finished: false,
 					private: {
-						handle: pub ? undefined : fileHandle,
+						handle: pub ? null : fileHandle,
 					},
 					public: {
-						location: pub ? fileLocation : undefined,
+						location: pub ? fileLocation : null,
 					},
 					deleted: false,
 					errored: false,
@@ -455,10 +455,10 @@ export class AccountSystem {
 				doc.uploaded = Date.now()
 				doc.finished = false
 				doc.private = {
-					handle: pub ? undefined : fileHandle,
+					handle: pub ? null : fileHandle,
 				}
 				doc.public = {
-					location: pub ? fileLocation : undefined,
+					location: pub ? fileLocation : null,
 					shortLinks: [],
 				}
 			},
@@ -475,9 +475,10 @@ export class AccountSystem {
 			type: file.type,
 			finished: !!file.finished,
 			private: {
-				handle: file?.private?.handle && unfreezeUint8Array(file.private.handle),
+				handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
 			},
 			public: {
+				location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
 				shortLinks: file.public.shortLinks.map((s) => unfreezeUint8Array(s)),
 			},
 		}
@@ -591,9 +592,10 @@ export class AccountSystem {
 			type: fileMeta.type,
 			finished: !!fileMeta.finished,
 			private: {
-				handle: fileMeta?.private?.handle && unfreezeUint8Array(fileMeta.private.handle),
+				handle: fileMeta?.private?.handle ? unfreezeUint8Array(fileMeta.private.handle) : null,
 			},
 			public: {
+				location: fileMeta?.public?.location ? unfreezeUint8Array(fileMeta.public.location) : null,
 				shortLinks: fileMeta.public.shortLinks.map((s) => unfreezeUint8Array(s)),
 			},
 		}
@@ -673,9 +675,10 @@ export class AccountSystem {
 			type: newFileMeta.type,
 			finished: !!newFileMeta.finished,
 			private: {
-				handle: newFileMeta?.private?.handle && unfreezeUint8Array(newFileMeta.private.handle),
+				handle: newFileMeta?.private?.handle ? unfreezeUint8Array(newFileMeta.private.handle) : null,
 			},
 			public: {
+				location: newFileMeta?.public?.location ? unfreezeUint8Array(newFileMeta.public.location) : null,
 				shortLinks: newFileMeta.public.shortLinks.map((s) => unfreezeUint8Array(s)),
 			},
 		}
@@ -1350,10 +1353,10 @@ export class AccountSystem {
 				type: file.type,
 				finished: !!file.finished,
 				private: {
-					handle: file?.private?.handle && unfreezeUint8Array(file.private.handle),
+					handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
 				},
 				public: {
-					location: file?.public?.location && unfreezeUint8Array(file.public.location),
+					location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
 				},
 			})),
 		}
@@ -1387,10 +1390,10 @@ export class AccountSystem {
 				type: file.type,
 				finished: !!file.finished,
 				private: {
-					handle: file?.private?.handle && unfreezeUint8Array(file.private.handle),
+					handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
 				},
 				public: {
-					location: file?.public?.location && unfreezeUint8Array(file.public.location),
+					location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
 				},
 			})),
 		}
