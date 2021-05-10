@@ -49,6 +49,8 @@ type MetadataDeleteRes = {
 export type MetadataAccessConfig = {
 	metadataNode: string
 
+	logging?: boolean
+
 	crypto: CryptoMiddleware
 	net: NetworkMiddleware
 }
@@ -377,12 +379,14 @@ export class MetadataAccess {
 		const cached = this.cache[pubString]
 
 		if (markCacheDirty || !cached || cached.dirty == true) {
-			console.warn(
-				"Cache: cache not used for",
-				pubString,
-				"because",
-				!cached ? "item was not found in cache" : "cache entry was marked dirty",
-			)
+			if (this.config.logging) {
+				console.warn(
+					"Cache: cache not used for",
+					pubString,
+					"because",
+					!cached ? "item was not found in cache" : "cache entry was marked dirty",
+				)
+			}
 			const payload = await getPayload<MetadataGetPayload>({
 				crypto: this.config.crypto,
 				payload: {
@@ -405,7 +409,9 @@ export class MetadataAccess {
 			this.dags[pubString] = dag
 		}
 		else {
-			console.info("Cache: using cached value for", pubString)
+			if (this.config.logging) {
+				console.info("Cache: using cached value for", pubString)
+			}
 
 			cached.lastAccess = Date.now()
 
@@ -453,12 +459,14 @@ export class MetadataAccess {
 		const cached = this.cache[pubString]
 
 		if (markCacheDirty || !cached || cached.dirty == true) {
-			console.warn(
-				"Cache: cache not used for",
-				pubString,
-				"because",
-				!cached ? "item was not found in cache" : "cache entry was marked dirty",
-			)
+			if (this.config.logging) {
+				console.warn(
+					"Cache: cache not used for",
+					pubString,
+					"because",
+					!cached ? "item was not found in cache" : "cache entry was marked dirty",
+				)
+			}
 
 			const res = await this.config.net.POST<MetadataGetRes>(
 				this.config.metadataNode + "/api/v2/metadata/get-public",
@@ -476,7 +484,9 @@ export class MetadataAccess {
 			this.dags[pubString] = dag
 		}
 		else {
-			console.info("Cache: using cached value for", pubString)
+			if (this.config.logging) {
+				console.info("Cache: using cached value for", pubString)
+			}
 
 			return cached.doc as Automerge.Doc<T>
 		}
