@@ -235,6 +235,13 @@ export class Account {
 			if (info.invoice) {
 				return info.invoice
 			}
+
+			if (info.paymentStatus == AccountPaymentStatus.PAID) {
+				return {
+					cost: 0,
+					ethAddress: "",
+				}
+			}
 		} catch {}
 
 		const payload = await getPayload<AccountCreationPayload>({
