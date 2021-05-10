@@ -1,7 +1,9 @@
 import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
+import { FileMeta } from "./filemeta"
 import { FileSystemObjectDeleteEvent } from "./events"
 import { getPayload } from "@opacity/util/src/payload"
+import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 
 export interface IFileSystemObject {
 	readonly public: boolean
@@ -11,6 +13,7 @@ export interface IFileSystemObject {
 	readonly location: Uint8Array | undefined
 
 	exists(): Promise<boolean>
+	metadata(): Promise<FileMeta | undefined>
 
 	_beforeDelete?: (o: this) => Promise<void>
 	_afterDelete?: (o: this) => Promise<void>
@@ -69,6 +72,19 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		this.config = config
 	}
 
+	private async _getDownloadURL (fileID: Uint8Array) {
+		const res = await this.config.net.POST(
+			this.config.storageNode + "/api/v1/download",
+			undefined,
+			JSON.stringify({
+				fileID: bytesToHex(fileID),
+			}),
+			(b) => new Response(b).text(),
+		)
+
+		return res
+	}
+
 	async exists () {
 		if (!this._handle && !this._location) {
 			console.warn("filesystem object already deleted")
@@ -79,14 +95,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		if (this._handle) {
 			const fileID = this._handle!.slice(0, 32)
 
-			const res = await this.config.net.POST(
-				this.config.storageNode + "/api/v1/download",
-				undefined,
-				JSON.stringify({
-					fileID: bytesToHex(fileID),
-				}),
-				(b) => new Response(b).text(),
-			)
+			const res = await this._getDownloadURL(fileID)
 
 			if (res.status == 200) {
 				return true
@@ -96,14 +105,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		if (this._location) {
 			const fileID = this._location!.slice(0, 32)
 
-			const res = await this.config.net.POST(
-				this.config.storageNode + "/api/v1/download",
-				undefined,
-				JSON.stringify({
-					fileID: bytesToHex(fileID),
-				}),
-				(b) => new Response(b).text(),
-			)
+			const res = await this._getDownloadURL(fileID)
 
 			if (res.status == 200) {
 				return true
@@ -111,6 +113,37 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		}
 
 		return false
+	}
+
+	async metadata (): Promise<FileMeta | undefined> {
+		if (!this._handle && !this._location) {
+			console.warn("filesystem object already deleted")
+
+			return
+		}
+
+		const fileID = this._location ? this._location.slice(0, 32) : this._handle!.slice(0, 32)
+
+		const downloadURL = await this._getDownloadURL(fileID)
+
+		const res = await this.config.net.GET(
+			downloadURL + "/metadata",
+			undefined,
+			undefined,
+			async (rs) => new Uint8Array(await new Response(rs).arrayBuffer()),
+		)
+
+		if (!res.ok) {
+			return
+		}
+
+		if (this._handle) {
+			return serializeEncrypted<FileMeta>(this.config.crypto, res.data, this._handle.slice(32, 64))
+		}
+
+		if (this._location) {
+			return JSON.parse(new TextDecoder().decode(res.data)) as FileMeta
+		}
 	}
 
 	async delete () {
