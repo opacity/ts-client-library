@@ -1,6 +1,6 @@
 {
 	"name": "@opacity/filesystem-access",
-	"version": "0.0.41",
+	"version": "0.0.42",
 	"description": "> TODO: description",
 	"author": "Connor <13987924+CKH4@users.noreply.github.com>",
 	"homepage": "https://github.com/opacity/ts-client-library#readme",
@@ -23,8 +23,8 @@
 		"test": "echo \"Error: run tests from root\" && exit 1"
 	},
 	"dependencies": {
-		"@opacity/account-system": "^0.0.41",
-		"@opacity/middleware": "^0.0.41",
-		"@opacity/util": "^0.0.41"
+		"@opacity/account-system": "^0.0.42",
+		"@opacity/middleware": "^0.0.42",
+		"@opacity/util": "^0.0.42"
 	}
 }
