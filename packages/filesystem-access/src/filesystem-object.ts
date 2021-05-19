@@ -18,12 +18,31 @@ export interface IFileSystemObject {
 	_beforeDelete?: (o: this) => Promise<void>
 	_afterDelete?: (o: this) => Promise<void>
 	delete(): Promise<void>
+
+	_beforeConvertToPublic?: (o: this) => Promise<void>
+	_afterConvertToPublic?: (o: this, res: PrivateToPublicResp) => Promise<void>
+	convertToPublic(): Promise<void>
 }
 
 export class FileSystemObjectDeletionError extends Error {
 	constructor (location: string, err: string) {
 		super(`DeletionError: Failed to delete "${location}". Error: "${err}"`)
 	}
+}
+
+export class FileSystemObjectConvertPublicError extends Error {
+	constructor (reason: string) {
+		super(`ConvertPublicError: Failed to convert file because ${reason}`)
+	}
+}
+
+type PrivateToPublicObj = {
+	fileHandle: string
+}
+
+type PrivateToPublicResp = {
+	s3_url: string
+	s3_thumbnail_url: string
 }
 
 export type FileSystemObjectConfig = {
@@ -59,9 +78,6 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 	}
 
 	config: FileSystemObjectConfig
-
-	_beforeDelete?: (o: FileSystemObject) => Promise<void>
-	_afterDelete?: (o: FileSystemObject) => Promise<void>
 
 	constructor ({ handle, location, config }: FileSystemObjectArgs) {
 		super()
@@ -146,6 +162,9 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		}
 	}
 
+	_beforeDelete?: (o: FileSystemObject) => Promise<void>
+	_afterDelete?: (o: FileSystemObject) => Promise<void>
+
 	async delete () {
 		if (!this._handle && !this._location) {
 			console.warn("filesystem object already deleted")
@@ -213,6 +232,41 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 
 			// clear sensitive data
 			delete this._location
+		}
+	}
+
+	_beforeConvertToPublic?: (o: FileSystemObject) => Promise<void>
+	_afterConvertToPublic?: (o: FileSystemObject) => Promise<void>
+
+	async convertToPublic (): Promise<void> {
+		if (this._location) {
+			throw new FileSystemObjectConvertPublicError("file is already public")
+		}
+
+		if (!this._handle) {
+			throw new FileSystemObjectConvertPublicError("file has no private source")
+		}
+
+		if (this._beforeConvertToPublic) {
+			await this._beforeConvertToPublic(this)
+		}
+
+		const payload = await getPayload<PrivateToPublicObj>({
+			crypto: this.config.crypto,
+			payload: {
+				fileHandle: bytesToHex(this._handle),
+			},
+		})
+
+		const res = await this.config.net.POST<PrivateToPublicResp>(
+			this.config.storageNode + "/api/v2/public-share/convert",
+			undefined,
+			JSON.stringify(payload),
+			(b) => new Response(b).json(),
+		)
+
+		if (this._afterConvertToPublic) {
+			this._afterConvertToPublic(this)
 		}
 	}
 }
