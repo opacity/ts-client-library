@@ -193,6 +193,64 @@ const unfreezeUint8Array = (arr: Automerge.FreezeObject<Uint8Array>) => {
 	return new Uint8Array(Object.values<number>(arr))
 }
 
+const unfreezeFileMetadata = (doc: Automerge.FreezeObject<FileMetadata>): FileMetadata => {
+	return {
+		location: unfreezeUint8Array(doc.location),
+		name: doc.name,
+		folderDerive: unfreezeUint8Array(doc.folderDerive),
+		size: doc.size,
+		uploaded: doc.uploaded,
+		modified: doc.modified,
+		type: doc.type,
+		finished: !!doc.finished,
+		private: {
+			handle: doc?.private?.handle ? unfreezeUint8Array(doc.private.handle) : null,
+		},
+		public: {
+			location: doc?.public?.location ? unfreezeUint8Array(doc.public.location) : null,
+			shortLinks: doc.public.shortLinks.map((s) => unfreezeUint8Array(s)),
+		},
+	}
+}
+
+const unfreezeFolderMetadata = (doc: Automerge.FreezeObject<FolderMetadata>): FolderMetadata => {
+	return {
+		location: unfreezeUint8Array(doc.location),
+		name: doc.name,
+		path: doc.path,
+		size: doc.size,
+		uploaded: doc.uploaded,
+		modified: doc.modified,
+		files: doc.files.map((file) => ({
+			location: unfreezeUint8Array(file.location),
+			name: file.name,
+		})),
+	}
+}
+
+const unfreezeShareMetadata = (doc: Automerge.FreezeObject<ShareMetadata>): ShareMetadata => {
+	return {
+		locationKey: unfreezeUint8Array(doc.locationKey),
+		encryptionKey: unfreezeUint8Array(doc.encryptionKey),
+		dateShared: doc.dateShared,
+		files: doc.files.map((file) => ({
+			name: file.name,
+			path: file.path,
+			size: file.size,
+			uploaded: file.uploaded,
+			modified: file.modified,
+			type: file.type,
+			finished: !!file.finished,
+			private: {
+				handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
+			},
+			public: {
+				location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
+			},
+		})),
+	}
+}
+
 export type AccountSystemConfig = {
 	metadataAccess: MetadataAccess
 }
@@ -359,23 +417,7 @@ export class AccountSystem {
 			throw new AccountSystemNotFoundError("file", filePath)
 		}
 
-		return {
-			location: unfreezeUint8Array(doc.location),
-			name: doc.name,
-			folderDerive: unfreezeUint8Array(doc.folderDerive),
-			size: doc.size,
-			uploaded: doc.uploaded,
-			modified: doc.modified,
-			type: doc.type,
-			finished: !!doc.finished,
-			private: {
-				handle: doc?.private?.handle ? unfreezeUint8Array(doc.private.handle) : null,
-			},
-			public: {
-				location: doc?.public?.location ? unfreezeUint8Array(doc.public.location) : null,
-				shortLinks: doc.public.shortLinks.map((s) => unfreezeUint8Array(s)),
-			},
-		}
+		return unfreezeFileMetadata(doc)
 	}
 
 	async addUpload (
@@ -465,23 +507,7 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(file.location),
-			name: file.name,
-			folderDerive: unfreezeUint8Array(file.folderDerive),
-			size: file.size,
-			uploaded: file.uploaded,
-			modified: file.modified,
-			type: file.type,
-			finished: !!file.finished,
-			private: {
-				handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
-			},
-			public: {
-				location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
-				shortLinks: file.public.shortLinks.map((s) => unfreezeUint8Array(s)),
-			},
-		}
+		return unfreezeFileMetadata(file)
 	}
 
 	async finishUpload (location: Uint8Array, markCacheDirty = false): Promise<void> {
@@ -582,23 +608,7 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(fileMeta.location),
-			name: fileMeta.name,
-			folderDerive: unfreezeUint8Array(fileMeta.folderDerive),
-			size: fileMeta.size,
-			uploaded: fileMeta.uploaded,
-			modified: fileMeta.modified,
-			type: fileMeta.type,
-			finished: !!fileMeta.finished,
-			private: {
-				handle: fileMeta?.private?.handle ? unfreezeUint8Array(fileMeta.private.handle) : null,
-			},
-			public: {
-				location: fileMeta?.public?.location ? unfreezeUint8Array(fileMeta.public.location) : null,
-				shortLinks: fileMeta.public.shortLinks.map((s) => unfreezeUint8Array(s)),
-			},
-		}
+		return unfreezeFileMetadata(fileMeta)
 	}
 
 	async moveFile (location: Uint8Array, newPath: string, markCacheDirty = false): Promise<FileMetadata> {
@@ -665,24 +675,9 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(newFileMeta.location),
-			name: newFileMeta.name,
-			folderDerive: unfreezeUint8Array(newFileMeta.folderDerive),
-			size: newFileMeta.size,
-			uploaded: newFileMeta.uploaded,
-			modified: newFileMeta.modified,
-			type: newFileMeta.type,
-			finished: !!newFileMeta.finished,
-			private: {
-				handle: newFileMeta?.private?.handle ? unfreezeUint8Array(newFileMeta.private.handle) : null,
-			},
-			public: {
-				location: newFileMeta?.public?.location ? unfreezeUint8Array(newFileMeta.public.location) : null,
-				shortLinks: newFileMeta.public.shortLinks.map((s) => unfreezeUint8Array(s)),
-			},
-		}
+		return unfreezeFileMetadata(newFileMeta)
 	}
+
 	async removeFile (location: Uint8Array, markCacheDirty = false) {
 		// console.log("removeFile(", location, ")")
 
@@ -990,18 +985,7 @@ export class AccountSystem {
 			throw new AccountSystemNotFoundError("folder", folderPath)
 		}
 
-		return {
-			location: unfreezeUint8Array(doc.location),
-			name: doc.name,
-			path: doc.path,
-			size: doc.size,
-			uploaded: doc.uploaded,
-			modified: doc.modified,
-			files: doc.files.map((fileEntry) => ({
-				location: unfreezeUint8Array(fileEntry.location),
-				name: fileEntry.name,
-			})),
-		}
+		return unfreezeFolderMetadata(doc)
 	}
 
 	async addFolder (path: string, markCacheDirty = false): Promise<FolderMetadata> {
@@ -1064,18 +1048,7 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(doc.location),
-			name: doc.name,
-			path: doc.path,
-			size: doc.size,
-			uploaded: doc.uploaded,
-			modified: doc.modified,
-			files: doc.files.map((file) => ({
-				location: unfreezeUint8Array(file.location),
-				name: file.name,
-			})),
-		}
+		return unfreezeFolderMetadata(doc)
 	}
 
 	async renameFolder (path: string, newName: string, markCacheDirty = false): Promise<FolderMetadata> {
@@ -1165,18 +1138,7 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(doc.location),
-			name: doc.name,
-			path: doc.path,
-			size: doc.size,
-			uploaded: doc.uploaded,
-			modified: doc.modified,
-			files: doc.files.map((file) => ({
-				location: unfreezeUint8Array(file.location),
-				name: file.name,
-			})),
-		}
+		return unfreezeFolderMetadata(doc)
 	}
 
 	async removeFolderByPath (path: string, markCacheDirty = false): Promise<void> {
@@ -1340,26 +1302,7 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			locationKey: unfreezeUint8Array(shareMeta.locationKey),
-			encryptionKey: unfreezeUint8Array(shareMeta.encryptionKey),
-			dateShared: shareMeta.dateShared,
-			files: shareMeta.files.map((file) => ({
-				name: file.name,
-				path: file.path,
-				size: file.size,
-				uploaded: file.uploaded,
-				modified: file.modified,
-				type: file.type,
-				finished: !!file.finished,
-				private: {
-					handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
-				},
-				public: {
-					location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
-				},
-			})),
-		}
+		return unfreezeShareMetadata(shareMeta)
 	}
 
 	async getShared (locationKey: Uint8Array, encryptionKey: Uint8Array, markCacheDirty = false): Promise<ShareMetadata> {
@@ -1377,25 +1320,6 @@ export class AccountSystem {
 			throw new AccountSystemNotFoundError("shared", bytesToB64URL(handle))
 		}
 
-		return {
-			locationKey: unfreezeUint8Array(shareMeta.locationKey),
-			encryptionKey: unfreezeUint8Array(shareMeta.encryptionKey),
-			dateShared: shareMeta.dateShared,
-			files: shareMeta.files.map((file) => ({
-				name: file.name,
-				path: file.path,
-				size: file.size,
-				uploaded: file.uploaded,
-				modified: file.modified,
-				type: file.type,
-				finished: !!file.finished,
-				private: {
-					handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
-				},
-				public: {
-					location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
-				},
-			})),
-		}
+		return unfreezeShareMetadata(shareMeta)
 	}
 }
