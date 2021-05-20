@@ -47,4 +47,22 @@ export const bindFileSystemObjectToAccountSystem = (accountSystem: AccountSystem
 
 		await accountSystem.removeFile(metaLocaction)
 	}
+
+	o._beforeConvertToPublic = async (o) => {
+		if (!o.handle) {
+			throw new Error("filesystem object error: handle not found")
+		}
+
+		const metadataLocation = await accountSystem.getFileMetadataLocationByFileHandle(o.handle)
+		await accountSystem.setFilePublicLocation(metadataLocation, o.handle.slice(0, 32))
+	}
+
+	o._afterConvertToPublic = async (o) => {
+		if (!o.handle) {
+			throw new Error("filesystem object error: handle not found")
+		}
+
+		const metadataLocation = await accountSystem.getFileMetadataLocationByFileHandle(o.handle)
+		await accountSystem.setFilePrivateHandle(metadataLocation, null)
+	}
 }
