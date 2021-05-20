@@ -18,7 +18,7 @@ export type FilePrivateInfo = {
 export type FilePublicInfo = {
 	// 32 bytes
 	location: Uint8Array | null
-	shortLinks: Uint8Array[]
+	shortLinks: string[]
 }
 
 export type FilePublicInfoMinimal = {
@@ -207,7 +207,7 @@ const unfreezeFileMetadata = (doc: Automerge.FreezeObject<FileMetadata>): FileMe
 		},
 		public: {
 			location: doc?.public?.location ? unfreezeUint8Array(doc.public.location) : null,
-			shortLinks: doc.public.shortLinks.map((s) => unfreezeUint8Array(s)),
+			shortLinks: doc.public.shortLinks || [],
 		},
 	}
 }
@@ -634,6 +634,49 @@ export class AccountSystem {
 			"Change file location",
 			(doc) => {
 				doc.public.location = newFileLocation
+			},
+			markCacheDirty,
+		)
+
+		return unfreezeFileMetadata(fileMetaDoc)
+	}
+
+	async addFilePublicShortlink (location: Uint8Array, shortlink: string, markCacheDirty = false): Promise<FileMetadata> {
+		// console.log("setFilePublicLocation(", location, shortlink, ")")
+
+		return await this._m.runExclusive(() => this._addFilePublicShortlink(location, shortlink, markCacheDirty))
+	}
+
+	async _addFilePublicShortlink (location: Uint8Array, shortlink: string, markCacheDirty = false): Promise<FileMetadata> {
+		// console.log("_setFilePublicLocation(", location, shortlink, ")")
+
+		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(location),
+			"Add shortlink",
+			(doc) => {
+				doc.public.shortLinks.push(shortlink)
+			},
+			markCacheDirty,
+		)
+
+		return unfreezeFileMetadata(fileMetaDoc)
+	}
+
+	async removeFilePublicShortlink (location: Uint8Array, shortlink: string, markCacheDirty = false): Promise<FileMetadata> {
+		// console.log("setFilePublicLocation(", location, shortlink, ")")
+
+		return await this._m.runExclusive(() => this._removeFilePublicShortlink(location, shortlink, markCacheDirty))
+	}
+
+	async _removeFilePublicShortlink (location: Uint8Array, shortlink: string, markCacheDirty = false): Promise<FileMetadata> {
+		// console.log("_setFilePublicLocation(", location, shortlink, ")")
+
+		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(location),
+			"Remove shortlink",
+			(doc) => {
+				const shortlinkIndex = doc.public.shortLinks.indexOf(shortlink)
+				doc.public.shortLinks.splice(shortlinkIndex, 1)
 			},
 			markCacheDirty,
 		)
