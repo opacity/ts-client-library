@@ -268,5 +268,8 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		if (this._afterConvertToPublic) {
 			await this._afterConvertToPublic(this)
 		}
+
+		this._location = this._handle.slice(0, 32)
+		this._handle = undefined
 	}
 }
