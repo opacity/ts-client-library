@@ -192,6 +192,12 @@ export class Account {
 		return res.data
 	}
 
+	async needsMigration (): Promise<boolean> {
+		const { account: { apiVersion } } = await this.info()
+
+		return apiVersion != 2
+	}
+
 	async createSubscription ({ stripeToken = "" }: AccountStripeArgs = {}): Promise<AccountGetRes> {
 		const payload = await getPayload({ crypto: this.config.crypto, payload: { stripeToken } })
 		const res = await this.config.net.POST(
