@@ -563,6 +563,84 @@ export class AccountSystem {
 		)
 	}
 
+	async setFilePrivateHandle (location: Uint8Array, newFileHandle: Uint8Array | null, markCacheDirty = false): Promise<FileMetadata> {
+		// console.log("setFileHandle(", location, newFileHandle, ")")
+
+		return await this._m.runExclusive(() => this._setFilePrivateHandle(location, newFileHandle, markCacheDirty))
+	}
+
+	async _setFilePrivateHandle (location: Uint8Array, newFileHandle: Uint8Array | null, markCacheDirty = false): Promise<FileMetadata> {
+		// console.log("_setFileHandle(", location, newFileHandle, ")")
+
+		const filesIndex = await this.getFilesIndex()
+		const fileEntry = filesIndex.files.find((fileEntry) => arraysEqual(fileEntry.location, location))
+
+		if (!fileEntry) {
+			throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
+		}
+
+		await this.config.metadataAccess.change<FilesIndex>(
+			this.indexes.files,
+			`Change handle for file "${bytesToB64URL(location)}"`,
+			(doc) => {
+				const entryIndex = doc.files.findIndex((fileEntry) => arraysEqual(fileEntry.location, location))
+
+				doc.files[entryIndex].private.handle = newFileHandle
+			},
+			markCacheDirty,
+		)
+
+		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(location),
+			"Change handle",
+			(doc) => {
+				doc.private.handle = newFileHandle
+			},
+			markCacheDirty,
+		)
+
+		return unfreezeFileMetadata(fileMetaDoc)
+	}
+
+	async setFilePublicLocation (location: Uint8Array, newFileLocation: Uint8Array | null, markCacheDirty = false): Promise<FileMetadata> {
+		// console.log("setFilePublicLocation(", location, newFileLocation, ")")
+
+		return await this._m.runExclusive(() => this._setFilePublicLocation(location, newFileLocation, markCacheDirty))
+	}
+
+	async _setFilePublicLocation (location: Uint8Array, newFileLocation: Uint8Array | null, markCacheDirty = false): Promise<FileMetadata> {
+		// console.log("_setFilePublicLocation(", location, newFileLocation, ")")
+
+		const filesIndex = await this.getFilesIndex()
+		const fileEntry = filesIndex.files.find((fileEntry) => arraysEqual(fileEntry.location, location))
+
+		if (!fileEntry) {
+			throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
+		}
+
+		await this.config.metadataAccess.change<FilesIndex>(
+			this.indexes.files,
+			`Change file location for file "${bytesToB64URL(location)}"`,
+			(doc) => {
+				const entryIndex = doc.files.findIndex((fileEntry) => arraysEqual(fileEntry.location, location))
+
+				doc.files[entryIndex].public.location = newFileLocation
+			},
+			markCacheDirty,
+		)
+
+		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(location),
+			"Change file location",
+			(doc) => {
+				doc.public.location = newFileLocation
+			},
+			markCacheDirty,
+		)
+
+		return unfreezeFileMetadata(fileMetaDoc)
+	}
+
 	async renameFile (location: Uint8Array, newName: string, markCacheDirty = false): Promise<FileMetadata> {
 		// console.log("renameFile(", location, newName, ")")
 
