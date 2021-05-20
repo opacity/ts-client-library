@@ -109,7 +109,6 @@ export type ShareFileMetadata = {
 	uploaded: number
 	modified: number
 	type: string
-	finished: boolean
 	private: FilePrivateInfo
 	public: FilePublicInfoMinimal
 }
@@ -240,7 +239,6 @@ const unfreezeShareMetadata = (doc: Automerge.FreezeObject<ShareMetadata>): Shar
 			uploaded: file.uploaded,
 			modified: file.modified,
 			type: file.type,
-			finished: !!file.finished,
 			private: {
 				handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
 			},
@@ -1261,7 +1259,6 @@ export class AccountSystem {
 						path: fileInit.path,
 						size: meta.size,
 						type: meta.type,
-						finished: !!meta.finished,
 						private: meta.private,
 						public: meta.public,
 					}
