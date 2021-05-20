@@ -266,7 +266,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		)
 
 		if (this._afterConvertToPublic) {
-			this._afterConvertToPublic(this)
+			await this._afterConvertToPublic(this)
 		}
 	}
 }

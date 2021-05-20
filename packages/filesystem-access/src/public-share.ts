@@ -133,7 +133,7 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		}
 
 		if (this._afterPublicShare) {
-			this._afterPublicShare(this, this._fileLocation, title, description, res.data.short_id)
+			await this._afterPublicShare(this, this._fileLocation, title, description, res.data.short_id)
 		}
 
 		this._shortlink = res.data.short_id
@@ -172,7 +172,7 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		}
 
 		if (this._afterPublicShareRevoke) {
-			this._afterPublicShareRevoke(this, this._shortlink)
+			await this._afterPublicShareRevoke(this, this._shortlink)
 		}
 
 		this._shortlink = res.data.short_id
