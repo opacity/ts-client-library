@@ -162,8 +162,8 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		}
 	}
 
-	_beforeDelete?: (o: FileSystemObject) => Promise<void>
-	_afterDelete?: (o: FileSystemObject) => Promise<void>
+	_beforeDelete?: (o: this) => Promise<void>
+	_afterDelete?: (o: this) => Promise<void>
 
 	async delete () {
 		if (!this._handle && !this._location) {
@@ -235,8 +235,8 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		}
 	}
 
-	_beforeConvertToPublic?: (o: FileSystemObject) => Promise<void>
-	_afterConvertToPublic?: (o: FileSystemObject) => Promise<void>
+	_beforeConvertToPublic?: (o: this) => Promise<void>
+	_afterConvertToPublic?: (o: this) => Promise<void>
 
 	async convertToPublic (): Promise<void> {
 		if (this._location) {

@@ -141,8 +141,8 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		return res.data.short_id
 	}
 
-	_beforePublicShareRevoke?: (o: FileSystemShare, shortLink: string) => Promise<void>
-	_afterPublicShareRevoke?: (o: FileSystemShare, shortLink: string) => Promise<void>
+	_beforePublicShareRevoke?: (o: this, shortLink: string) => Promise<void>
+	_afterPublicShareRevoke?: (o: this, shortLink: string) => Promise<void>
 
 	async publicShareRevoke (): Promise<void> {
 		if (!this._shortlink) {
