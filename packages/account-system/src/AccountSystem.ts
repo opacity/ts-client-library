@@ -572,7 +572,7 @@ export class AccountSystem {
 	async _setFilePrivateHandle (location: Uint8Array, newFileHandle: Uint8Array | null, markCacheDirty = false): Promise<FileMetadata> {
 		// console.log("_setFileHandle(", location, newFileHandle, ")")
 
-		const filesIndex = await this.getFilesIndex()
+		const filesIndex = await this._getFilesIndex(markCacheDirty)
 		const fileEntry = filesIndex.files.find((fileEntry) => arraysEqual(fileEntry.location, location))
 
 		if (!fileEntry) {
@@ -611,7 +611,7 @@ export class AccountSystem {
 	async _setFilePublicLocation (location: Uint8Array, newFileLocation: Uint8Array | null, markCacheDirty = false): Promise<FileMetadata> {
 		// console.log("_setFilePublicLocation(", location, newFileLocation, ")")
 
-		const filesIndex = await this.getFilesIndex()
+		const filesIndex = await this._getFilesIndex(markCacheDirty)
 		const fileEntry = filesIndex.files.find((fileEntry) => arraysEqual(fileEntry.location, location))
 
 		if (!fileEntry) {
