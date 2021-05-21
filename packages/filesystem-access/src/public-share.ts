@@ -1,9 +1,6 @@
 import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
-import { FileMeta } from "./filemeta"
-import { FileSystemObjectDeleteEvent } from "./events"
 import { getPayload } from "@opacity/util/src/payload"
-import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 
 export interface IFileSystemShare {
 	readonly shortlink?: string
