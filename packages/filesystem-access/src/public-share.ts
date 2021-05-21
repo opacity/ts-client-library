@@ -5,9 +5,9 @@ import { getPayload } from "@opacity/util/src/payload"
 export interface IFileSystemShare {
 	readonly shortlink?: string
 
-	_beforePublicShare?: (o: this, fileLocation: Uint8Array, title: string, description: string) => Promise<void>
-	_afterPublicShare?: (o: this, fileLocation: Uint8Array, title: string, description: string, shortLink: string) => Promise<void>
-	publicShare(title: string, description: string): Promise<string>
+	_beforePublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs) => Promise<void>
+	_afterPublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs, shortLink: string) => Promise<void>
+	publicShare(publicShare: PublicShareArgs): Promise<string>
 
 	_beforePublicShareRevoke?: (o: this, shortLink: string) => Promise<void>
 	_afterPublicShareRevoke?: (o: this, shortLink: string) => Promise<void>
@@ -32,9 +32,18 @@ export class FileSystemShareMissingDataError extends Error {
 	}
 }
 
+type PublicShareArgs = {
+	title: string
+	description: string
+	mimeType: string
+	fileExtension: string
+}
+
 type CreateShortlinkObj = {
 	file_id: string
 	title: string
+	mimeType: string
+	fileExtension: string
 	description: string
 }
 
@@ -93,10 +102,10 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		this.config = config
 	}
 
-	_beforePublicShare?: (o: this, fileLocation: Uint8Array, title: string, description: string) => Promise<void>
-	_afterPublicShare?: (o: this, fileLocation: Uint8Array, title: string, description: string, shortLink: string) => Promise<void>
+	_beforePublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs) => Promise<void>
+	_afterPublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs, shortLink: string) => Promise<void>
 
-	async publicShare (title: string, description: string): Promise<string> {
+	async publicShare (publicShare: PublicShareArgs): Promise<string> {
 		if (this._shortlink) {
 			return this._shortlink
 		}
@@ -106,15 +115,17 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		}
 
 		if (this._beforePublicShare) {
-			await this._beforePublicShare(this, this._fileLocation, title, description)
+			await this._beforePublicShare(this, this._fileLocation, publicShare)
 		}
 
 		const payload = await getPayload<CreateShortlinkObj>({
 			crypto: this.config.crypto,
 			payload: {
 				file_id: bytesToHex(this._fileLocation),
-				description,
-				title,
+				title: publicShare.title,
+				description: publicShare.description,
+				fileExtension: publicShare.fileExtension,
+				mimeType: publicShare.mimeType,
 			},
 		})
 
@@ -130,7 +141,7 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		}
 
 		if (this._afterPublicShare) {
-			await this._afterPublicShare(this, this._fileLocation, title, description, res.data.short_id)
+			await this._afterPublicShare(this, this._fileLocation, publicShare, res.data.short_id)
 		}
 
 		this._shortlink = res.data.short_id
