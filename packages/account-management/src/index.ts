@@ -205,7 +205,7 @@ export class Account {
       },
     });
     const res = await this.config.net.POST(
-      this.config.storageNode + "/api/v1/account/updateApiVersion",
+      this.config.storageNode + "/api/v2/account/updateApiVersion",
       undefined,
       JSON.stringify(payload),
       (body) => new Response(body).json()
