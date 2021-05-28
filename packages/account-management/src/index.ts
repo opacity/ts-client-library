@@ -205,7 +205,7 @@ export class Account {
       },
     });
     const res = await this.config.net.POST(
-      this.config.storageNode + "/api/v1/account-data",
+      this.config.storageNode + "/api/v1/account/updateApiVersion",
       undefined,
       JSON.stringify(payload),
       (body) => new Response(body).json()
@@ -213,7 +213,7 @@ export class Account {
 
     if (!res.ok) {
       throw new Error(
-        "Error getting account information: " + JSON.stringify(res.data)
+        "Error updating the API Version: " + JSON.stringify(res.data)
       );
     }
 
