@@ -300,7 +300,6 @@ export class AccountSystem {
   _m = new Mutex();
 
   constructor(config: AccountSystemConfig) {
-    console.log("Account system created");
     this.config = config;
   }
 

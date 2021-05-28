@@ -169,6 +169,14 @@ export type AccountConfig = {
   storageNode: string;
 };
 
+export type AccountUpdateAPIVersionPayload = {
+  timestamp: number;
+};
+
+export type AccountUpdateAPIVersionRes = {
+  status: string;
+};
+
 export class Account {
   config: AccountConfig;
 
@@ -198,13 +206,13 @@ export class Account {
   }
 
   async updateApiVersion() {
-    const payload = await getPayload({
+    const payload = await getPayload<AccountUpdateAPIVersionPayload>({
       crypto: this.config.crypto,
       payload: {
         timestamp: Math.floor(Date.now()),
       },
     });
-    const res = await this.config.net.POST(
+    const res = await this.config.net.POST<AccountUpdateAPIVersionRes>(
       this.config.storageNode + "/api/v2/account/updateApiVersion",
       undefined,
       JSON.stringify(payload),
