@@ -6,7 +6,12 @@ export interface IFileSystemShare {
 	readonly shortlink?: string
 
 	_beforePublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs) => Promise<void>
-	_afterPublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs, shortLink: string) => Promise<void>
+	_afterPublicShare?: (
+		o: this,
+		fileLocation: Uint8Array,
+		publicShare: PublicShareArgs,
+		shortLink: string,
+	) => Promise<void>
 	publicShare(publicShare: PublicShareArgs): Promise<string>
 
 	_beforePublicShareRevoke?: (o: this, shortLink: string) => Promise<void>
@@ -103,7 +108,12 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 	}
 
 	_beforePublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs) => Promise<void>
-	_afterPublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs, shortLink: string) => Promise<void>
+	_afterPublicShare?: (
+		o: this,
+		fileLocation: Uint8Array,
+		publicShare: PublicShareArgs,
+		shortLink: string,
+	) => Promise<void>
 
 	async publicShare (publicShare: PublicShareArgs): Promise<string> {
 		if (this._shortlink) {
