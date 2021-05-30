@@ -6,17 +6,17 @@ export interface IFileSystemShare {
 	readonly shortlink?: string
 	readonly fileLocation?: Uint8Array
 
-	_beforePublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs) => Promise<void>
+	_beforePublicShare?: (s: IFileSystemShare, fileLocation: Uint8Array, publicShare: PublicShareArgs) => Promise<void>
 	_afterPublicShare?: (
-		o: this,
+		s: IFileSystemShare,
 		fileLocation: Uint8Array,
 		publicShare: PublicShareArgs,
 		shortLink: string,
 	) => Promise<void>
 	publicShare(publicShare: PublicShareArgs): Promise<string>
 
-	_beforePublicShareRevoke?: (o: this, fileLocation: Uint8Array, shortLink: string) => Promise<void>
-	_afterPublicShareRevoke?: (o: this, fileLocation: Uint8Array, shortLink: string) => Promise<void>
+	_beforePublicShareRevoke?: (s: IFileSystemShare, fileLocation: Uint8Array, shortLink: string) => Promise<void>
+	_afterPublicShareRevoke?: (s: IFileSystemShare, fileLocation: Uint8Array, shortLink: string) => Promise<void>
 	publicShareRevoke(): Promise<void>
 }
 
@@ -108,9 +108,9 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		this.config = config
 	}
 
-	_beforePublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs) => Promise<void>
+	_beforePublicShare?: (s: IFileSystemShare, fileLocation: Uint8Array, publicShare: PublicShareArgs) => Promise<void>
 	_afterPublicShare?: (
-		o: this,
+		s: IFileSystemShare,
 		fileLocation: Uint8Array,
 		publicShare: PublicShareArgs,
 		shortLink: string,
@@ -160,8 +160,8 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		return res.data.short_id
 	}
 
-	_beforePublicShareRevoke?: (o: this, fileLocation: Uint8Array, shortLink: string) => Promise<void>
-	_afterPublicShareRevoke?: (o: this, fileLocation: Uint8Array, shortLink: string) => Promise<void>
+	_beforePublicShareRevoke?: (s: IFileSystemShare, fileLocation: Uint8Array, shortLink: string) => Promise<void>
+	_afterPublicShareRevoke?: (s: IFileSystemShare, fileLocation: Uint8Array, shortLink: string) => Promise<void>
 
 	async publicShareRevoke (): Promise<void> {
 		if (!this._shortlink) {

@@ -15,12 +15,12 @@ export interface IFileSystemObject {
 	exists(): Promise<boolean>
 	metadata(): Promise<FileMeta | undefined>
 
-	_beforeDelete?: (o: this) => Promise<void>
-	_afterDelete?: (o: this) => Promise<void>
+	_beforeDelete?: (o: IFileSystemObject) => Promise<void>
+	_afterDelete?: (o: IFileSystemObject) => Promise<void>
 	delete(): Promise<void>
 
-	_beforeConvertToPublic?: (o: this) => Promise<void>
-	_afterConvertToPublic?: (o: this, res: PrivateToPublicResp) => Promise<void>
+	_beforeConvertToPublic?: (o: IFileSystemObject) => Promise<void>
+	_afterConvertToPublic?: (o: IFileSystemObject, res: PrivateToPublicResp) => Promise<void>
 	convertToPublic(): Promise<void>
 }
 
@@ -162,8 +162,8 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		}
 	}
 
-	_beforeDelete?: (o: this) => Promise<void>
-	_afterDelete?: (o: this) => Promise<void>
+	_beforeDelete?: (o: IFileSystemObject) => Promise<void>
+	_afterDelete?: (o: IFileSystemObject) => Promise<void>
 
 	async delete () {
 		if (!this._handle && !this._location) {
@@ -235,8 +235,8 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		}
 	}
 
-	_beforeConvertToPublic?: (o: this) => Promise<void>
-	_afterConvertToPublic?: (o: this) => Promise<void>
+	_beforeConvertToPublic?: (o: IFileSystemObject) => Promise<void>
+	_afterConvertToPublic?: (o: IFileSystemObject) => Promise<void>
 
 	async convertToPublic (): Promise<void> {
 		if (this._location) {

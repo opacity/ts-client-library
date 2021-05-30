@@ -32,7 +32,7 @@ export const bindDownloadToAccountSystem = (accountSystem: AccountSystem, d: Dow
 	// TODO: download history
 }
 
-export const bindFileSystemObjectToAccountSystem = (accountSystem: AccountSystem, o: IFileSystemObject) => {
+export const bindFileSystemObjectToAccountSystem = <T extends IFileSystemObject> (accountSystem: AccountSystem, o: T) => {
 	// handle deletion
 	o._afterDelete = async (o) => {
 		const fileHandle = o.handle
@@ -68,7 +68,7 @@ export const bindFileSystemObjectToAccountSystem = (accountSystem: AccountSystem
 	}
 }
 
-export const bindPublicShareToAccountSystem = (accountSystem: AccountSystem, s: IFileSystemShare) => {
+export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (accountSystem: AccountSystem, s: T) => {
 	s._afterPublicShare = async (s, fileLocation, share, shortlink) => {
 		if (!shortlink) {
 			throw new Error("public share error: cannot find shortlink")
