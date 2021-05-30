@@ -4,6 +4,7 @@ import { getPayload } from "@opacity/util/src/payload"
 
 export interface IFileSystemShare {
 	readonly shortlink?: string
+	readonly fileLocation?: Uint8Array
 
 	_beforePublicShare?: (o: this, fileLocation: Uint8Array, publicShare: PublicShareArgs) => Promise<void>
 	_afterPublicShare?: (
@@ -14,8 +15,8 @@ export interface IFileSystemShare {
 	) => Promise<void>
 	publicShare(publicShare: PublicShareArgs): Promise<string>
 
-	_beforePublicShareRevoke?: (o: this, shortLink: string) => Promise<void>
-	_afterPublicShareRevoke?: (o: this, shortLink: string) => Promise<void>
+	_beforePublicShareRevoke?: (o: this, fileLocation: Uint8Array, shortLink: string) => Promise<void>
+	_afterPublicShareRevoke?: (o: this, fileLocation: Uint8Array, shortLink: string) => Promise<void>
 	publicShareRevoke(): Promise<void>
 }
 
@@ -140,7 +141,7 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		})
 
 		const res = await this.config.net.POST<CreateShortlinkResp>(
-			this.config.storageNode + "/api/v2/public-share/convert",
+			this.config.storageNode + "/api/v2/public-share/shortlink",
 			undefined,
 			JSON.stringify(payload),
 			(b) => new Response(b).json(),
@@ -159,16 +160,20 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		return res.data.short_id
 	}
 
-	_beforePublicShareRevoke?: (o: this, shortLink: string) => Promise<void>
-	_afterPublicShareRevoke?: (o: this, shortLink: string) => Promise<void>
+	_beforePublicShareRevoke?: (o: this, fileLocation: Uint8Array, shortLink: string) => Promise<void>
+	_afterPublicShareRevoke?: (o: this, fileLocation: Uint8Array, shortLink: string) => Promise<void>
 
 	async publicShareRevoke (): Promise<void> {
 		if (!this._shortlink) {
-			throw new FileSystemShareRevokeShortlinkError("shortlink")
+			throw new FileSystemShareMissingDataError("shortlink")
+		}
+
+		if (!this._fileLocation) {
+			throw new FileSystemShareMissingDataError("file location")
 		}
 
 		if (this._beforePublicShareRevoke) {
-			await this._beforePublicShareRevoke(this, this._shortlink)
+			await this._beforePublicShareRevoke(this, this._fileLocation, this._shortlink)
 		}
 
 		const payload = await getPayload<PublicShareObj>({
@@ -178,22 +183,22 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 			},
 		})
 
-		const res = await this.config.net.POST<CreateShortlinkResp>(
-			this.config.storageNode + "/api/v2/public-share/convert",
+		const res = await this.config.net.POST<PublicShareRevokeRes>(
+			this.config.storageNode + "/api/v2/public-share/revoke",
 			undefined,
 			JSON.stringify(payload),
 			(b) => new Response(b).json(),
 		)
 
 		if (!res.ok) {
-			throw new FileSystemShareCreateShortlinkError(res.data.toString())
+			throw new FileSystemShareRevokeShortlinkError(res.data.toString())
 		}
 
 		if (this._afterPublicShareRevoke) {
-			await this._afterPublicShareRevoke(this, this._shortlink)
+			await this._afterPublicShareRevoke(this, this._fileLocation, this._shortlink)
 		}
 
-		this._shortlink = res.data.short_id
+		this._shortlink = undefined
 
 		return
 	}

@@ -3,6 +3,7 @@ import { Downloader } from "./downloader"
 import { extractPromise } from "@opacity/util/src/promise"
 import { IFileSystemObject } from "./filesystem-object"
 import { Uploader } from "./uploader"
+import { IFileSystemShare } from "./public-share"
 
 export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Uploader) => {
 	const [fileMetadata, resolveFileMetadata] = extractPromise<FileMetadata>()
@@ -64,5 +65,31 @@ export const bindFileSystemObjectToAccountSystem = (accountSystem: AccountSystem
 
 		const metadataLocation = await accountSystem.getFileMetadataLocationByFileHandle(o.handle)
 		await accountSystem.setFilePrivateHandle(metadataLocation, null)
+	}
+}
+
+export const bindPublicShareToAccountSystem = (accountSystem: AccountSystem, s: IFileSystemShare) => {
+	s._afterPublicShare = async (s, fileLocation, share, shortlink) => {
+		if (!shortlink) {
+			throw new Error("public share error: cannot find shortlink")
+		}
+
+		if (!s.fileLocation) {
+			throw new Error("public share error: no valid file location")
+		}
+
+		await accountSystem.addFilePublicShortlink(fileLocation, shortlink)
+	}
+
+	s._afterPublicShareRevoke = async (s, fileLocation, shortlink) => {
+		if (!shortlink) {
+			throw new Error("public share error: cannot find shortlink")
+		}
+
+		if (!s.fileLocation) {
+			throw new Error("public share error: no valid file location")
+		}
+
+		await accountSystem.addFilePublicShortlink(fileLocation, shortlink)
 	}
 }
