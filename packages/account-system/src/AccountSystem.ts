@@ -342,7 +342,7 @@ export class AccountSystem {
 	async getFileMetadataLocationByFileLocation (fileLocation: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
 		// console.log("getFileMetadataLocationByFileLocation(", fileLocation, ")")
 
-		return await this._m.runExclusive(() => this._getFileMetadataLocationByFileHandle(fileLocation, markCacheDirty))
+		return await this._m.runExclusive(() => this._getFileMetadataLocationByFileLocation(fileLocation, markCacheDirty))
 	}
 
 	async _getFileMetadataLocationByFileLocation (fileLocation: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
@@ -355,7 +355,7 @@ export class AccountSystem {
 		)
 
 		if (!fileEntry) {
-			throw new AccountSystemNotFoundError("file of handle", bytesToHex(fileLocation.slice(0, 32)) + "...")
+			throw new AccountSystemNotFoundError("file of location", bytesToHex(fileLocation.slice(0, 32)) + "...")
 		}
 
 		return fileEntry.location
