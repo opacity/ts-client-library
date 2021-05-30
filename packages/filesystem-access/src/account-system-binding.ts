@@ -78,7 +78,9 @@ export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (acco
 			throw new Error("public share error: no valid file location")
 		}
 
-		await accountSystem.addFilePublicShortlink(fileLocation, shortlink)
+		const metaLocation = await accountSystem.getFileMetadataLocationByFileLocation(fileLocation)
+
+		await accountSystem.addFilePublicShortlink(metaLocation, shortlink)
 	}
 
 	s._afterPublicShareRevoke = async (s, fileLocation, shortlink) => {
@@ -90,6 +92,8 @@ export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (acco
 			throw new Error("public share error: no valid file location")
 		}
 
-		await accountSystem.addFilePublicShortlink(fileLocation, shortlink)
+		const metaLocation = await accountSystem.getFileMetadataLocationByFileLocation(fileLocation)
+
+		await accountSystem.addFilePublicShortlink(metaLocation, shortlink)
 	}
 }
