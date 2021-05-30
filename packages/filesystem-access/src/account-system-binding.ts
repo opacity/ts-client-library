@@ -94,6 +94,6 @@ export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (acco
 
 		const metaLocation = await accountSystem.getFileMetadataLocationByFileLocation(fileLocation)
 
-		await accountSystem.addFilePublicShortlink(metaLocation, shortlink)
+		await accountSystem.removeFilePublicShortlink(metaLocation, shortlink)
 	}
 }
