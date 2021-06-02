@@ -74,7 +74,7 @@ export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (acco
 			throw new Error("public share error: cannot find shortlink")
 		}
 
-		if (!s.fileLocation) {
+		if (!fileLocation) {
 			throw new Error("public share error: no valid file location")
 		}
 
@@ -88,7 +88,7 @@ export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (acco
 			throw new Error("public share error: cannot find shortlink")
 		}
 
-		if (!s.fileLocation) {
+		if (!fileLocation) {
 			throw new Error("public share error: no valid file location")
 		}
 
