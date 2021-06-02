@@ -207,7 +207,7 @@ const unfreezeFileMetadata = (doc: Automerge.FreezeObject<FileMetadata>): FileMe
 		},
 		public: {
 			location: doc?.public?.location ? unfreezeUint8Array(doc.public.location) : null,
-			shortLinks: doc.public.shortLinks || [],
+			shortLinks: doc.public.shortLinks.map((sl) => sl) || [],
 		},
 	}
 }
