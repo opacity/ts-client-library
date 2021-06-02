@@ -1446,7 +1446,20 @@ export class AccountSystem {
 				doc.locationKey = locationKey
 				doc.encryptionKey = encryptionKey
 				doc.dateShared = Date.now()
-				doc.files = files
+				doc.files = files.map((file) => ({
+					modified: file.modified,
+					name: file.name,
+					path: file.path,
+					private: {
+						handle: file.private.handle,
+					},
+					public: {
+						location: file.public.location,
+					},
+					size: file.size,
+					type: file.type,
+					uploaded: file.uploaded,
+				}))
 			},
 			encryptionKey,
 			markCacheDirty,
