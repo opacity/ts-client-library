@@ -99,7 +99,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 	private async _getDownloadURL (): Promise<string> {
 		if (this._handle) {
 			const res = await this.config.net.POST(
-				this.config.storageNode + "/api/v1/download/private",
+				this.config.storageNode + "/api/v2/download/private",
 				undefined,
 				JSON.stringify({
 					fileID: bytesToHex(this._handle.slice(0, 32)),
