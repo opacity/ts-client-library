@@ -13,7 +13,8 @@ export interface IFileSystemObject {
 	readonly location: Uint8Array | undefined
 
 	exists(): Promise<boolean>
-	metadata(): Promise<FileMeta | undefined>
+	metadata(): Promise<FileMeta>
+	size(): Promise<number>
 
 	_beforeDelete?: (o: IFileSystemObject) => Promise<void>
 	_afterDelete?: (o: IFileSystemObject) => Promise<void>
@@ -36,8 +37,15 @@ export class FileSystemObjectConvertPublicError extends Error {
 	}
 }
 
+export class FileSystemObjectMissingDataError extends Error {
+	constructor (type: string) {
+		super(`MissingDataError: Missing ${type} from object properties`)
+	}
+}
+
 type PrivateToPublicObj = {
 	fileHandle: string
+	size: number
 }
 
 type PrivateToPublicResp = {
@@ -88,59 +96,66 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		this.config = config
 	}
 
-	private async _getDownloadURL (fileID: Uint8Array) {
-		const res = await this.config.net.POST(
-			this.config.storageNode + "/api/v1/download",
-			undefined,
-			JSON.stringify({
-				fileID: bytesToHex(fileID),
-			}),
-			(b) => new Response(b).text(),
-		)
+	private async _getDownloadURL (): Promise<string> {
+		if (this._handle) {
+			const res = await this.config.net.POST(
+				this.config.storageNode + "/api/v1/download/private",
+				undefined,
+				JSON.stringify({
+					fileID: bytesToHex(this._handle.slice(0, 32)),
+				}),
+				(b) => new Response(b).text(),
+			)
 
-		return res
+			if (res.status != 200 || !res.data) {
+				throw new Error("_getDownloadURL: failed to get download url")
+			}
+
+			return res.data
+		}
+
+		if (this._location) {
+			const res = await this.config.net.POST(
+				this.config.storageNode + "/api/v2/download/public",
+				undefined,
+				JSON.stringify({
+					fileID: bytesToHex(this._location.slice(0, 32)),
+				}),
+				(b) => new Response(b).text(),
+			)
+
+			if (res.status != 200 || !res.data) {
+				throw new Error("_getDownloadURL: failed to get download url")
+			}
+
+			return res.data
+		}
+
+		throw new Error("_getDownloadURL: no valid sources found")
 	}
 
 	async exists () {
 		if (!this._handle && !this._location) {
-			console.warn("filesystem object already deleted")
+			console.warn(new Error("filesystem object already deleted"))
 
 			return false
 		}
 
-		if (this._handle) {
-			const fileID = this._handle!.slice(0, 32)
+		try {
+			await this._getDownloadURL()
 
-			const res = await this._getDownloadURL(fileID)
-
-			if (res.status == 200) {
-				return true
-			}
+			return true
+		} catch (err) {
+			return false
 		}
-
-		if (this._location) {
-			const fileID = this._location!.slice(0, 32)
-
-			const res = await this._getDownloadURL(fileID)
-
-			if (res.status == 200) {
-				return true
-			}
-		}
-
-		return false
 	}
 
-	async metadata (): Promise<FileMeta | undefined> {
+	async metadata (): Promise<FileMeta> {
 		if (!this._handle && !this._location) {
-			console.warn("filesystem object already deleted")
-
-			return
+			throw new FileSystemObjectMissingDataError("handle and location")
 		}
 
-		const fileID = this._location ? this._location.slice(0, 32) : this._handle!.slice(0, 32)
-
-		const downloadURL = await this._getDownloadURL(fileID)
+		const downloadURL = await this._getDownloadURL()
 
 		const res = await this.config.net.GET(
 			downloadURL + "/metadata",
@@ -150,16 +165,14 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		)
 
 		if (!res.ok) {
-			return
+			throw new FileSystemObjectConvertPublicError(new TextDecoder().decode(res.data))
 		}
 
 		if (this._handle) {
 			return serializeEncrypted<FileMeta>(this.config.crypto, res.data, this._handle.slice(32, 64))
 		}
 
-		if (this._location) {
-			return JSON.parse(new TextDecoder().decode(res.data)) as FileMeta
-		}
+		return JSON.parse(new TextDecoder().decode(res.data)) as FileMeta
 	}
 
 	_beforeDelete?: (o: IFileSystemObject) => Promise<void>
@@ -235,6 +248,24 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		}
 	}
 
+	async size (): Promise<number> {
+		const dl = await this._getDownloadURL()
+
+		const res = await this.config.net.HEAD(dl + "/file")
+
+		if (!res.ok) {
+			throw new Error("failed to HEAD file")
+		}
+
+		const size = res.headers.get("content-length")
+
+		if (!size) {
+			throw new Error("failed to get file size")
+		}
+
+		return +size
+	}
+
 	_beforeConvertToPublic?: (o: IFileSystemObject) => Promise<void>
 	_afterConvertToPublic?: (o: IFileSystemObject) => Promise<void>
 
@@ -255,6 +286,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 			crypto: this.config.crypto,
 			payload: {
 				fileHandle: bytesToHex(this._handle),
+				size: await this.size(),
 			},
 		})
 
