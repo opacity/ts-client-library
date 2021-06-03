@@ -662,7 +662,7 @@ export class AccountSystem {
 		shortlink: string,
 		markCacheDirty = false,
 	): Promise<FileMetadata> {
-		console.log("setFilePublicLocation(", location, shortlink, ")")
+		console.log("addFilePublicShortlink(", location, shortlink, ")")
 
 		return await this._m.runExclusive(() => this._addFilePublicShortlink(location, shortlink, markCacheDirty))
 	}
@@ -672,7 +672,7 @@ export class AccountSystem {
 		shortlink: string,
 		markCacheDirty = false,
 	): Promise<FileMetadata> {
-		// console.log("_setFilePublicLocation(", location, shortlink, ")")
+		// console.log("_addFilePublicShortlink(", location, shortlink, ")")
 
 		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
 			this.getFileDerivePath(location),
@@ -691,7 +691,7 @@ export class AccountSystem {
 		shortlink: string,
 		markCacheDirty = false,
 	): Promise<FileMetadata> {
-		console.log("setFilePublicLocation(", location, shortlink, ")")
+		console.log("removeFilePublicShortlink(", location, shortlink, ")")
 
 		return await this._m.runExclusive(() => this._removeFilePublicShortlink(location, shortlink, markCacheDirty))
 	}
@@ -701,7 +701,7 @@ export class AccountSystem {
 		shortlink: string,
 		markCacheDirty = false,
 	): Promise<FileMetadata> {
-		// console.log("_setFilePublicLocation(", location, shortlink, ")")
+		// console.log("_removeFilePublicShortlink(", location, shortlink, ")")
 
 		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
 			this.getFileDerivePath(location),
