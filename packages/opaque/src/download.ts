@@ -30,6 +30,7 @@ import {
 } from "@opacity/util/src/streams"
 import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
+import { FileMetadata } from "@opacity/account-system/src"
 
 export type OpaqueDownloadConfig = {
 	storageNode: string
@@ -47,6 +48,7 @@ export type OpaqueDownloadArgs = {
 	config: OpaqueDownloadConfig
 	handle: Uint8Array
 	name: string
+	fileMeta: FileMetadata
 }
 
 export class OpaqueDownload extends EventTarget implements Downloader, IDownloadEvents, IOpaqueDownloadEvents {
@@ -97,6 +99,8 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 	_reject: (reason?: any) => void
 
 	_name: string
+
+	_fileMeta: FileMetadata
 
 	get name () {
 		return this._name
@@ -169,7 +173,7 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		}
 	}
 
-	constructor ({ config, handle, name }: OpaqueDownloadArgs) {
+	constructor ({ config, handle, name, fileMeta }: OpaqueDownloadArgs) {
 		super()
 
 		this.config = config
@@ -181,6 +185,8 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		this._encryptionKey[1](handle.slice(32))
 
 		this._name = name
+
+		this._fileMeta = fileMeta
 
 		const d = this
 
@@ -238,6 +244,9 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 
 	async getMetadata (): Promise<FileMeta | undefined> {
 		return this._m.runExclusive(async () => {
+			if (this._fileMeta) {
+				return this._fileMeta
+			}
 			if (this._metadata) {
 				return this._metadata
 			}
@@ -306,6 +315,7 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		}
 
 		const downloadUrl = await d.getDownloadUrl().catch(d._reject)
+		console.log(downloadUrl, '----')
 		if (!downloadUrl) {
 			return
 		}
@@ -357,7 +367,7 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 
 						const res = await d.config.net
 							.GET(
-								downloadUrl + "/file",
+								downloadUrl + "",
 								{
 									range: `bytes=${partIndex * partSizeOnFS}-${
 										Math.min(d._sizeOnFS!, (partIndex + 1) * partSizeOnFS) - 1
