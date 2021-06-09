@@ -26,6 +26,16 @@ const fetchAdapter = async <T>(
 }
 
 export class WebNetworkMiddleware implements NetworkMiddleware {
+	HEAD: NetworkMiddlewareFunction<undefined> = async (
+		address: string,
+		headers?: HeadersInit,
+		body?: undefined,
+		mapReturn = async (b: ReadableStream<Uint8Array> | undefined) =>
+			new Uint8Array(await new Response(b).arrayBuffer()),
+	) => {
+		return await fetchAdapter("HEAD", address, headers, body, mapReturn)
+	}
+
 	GET: NetworkMiddlewareFunction<undefined> = async (
 		address: string,
 		headers?: HeadersInit,

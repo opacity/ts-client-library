@@ -1,7 +1,8 @@
+import { Semaphore } from "async-mutex"
 import Automerge from "automerge/src/automerge"
-import jssha from "jssha/src/sha256"
+import jssha from "jssha/dist/sha256"
 
-import { b64ToBytes, bytesToB64 } from "@opacity/util/src/b64"
+import { b64URLToBytes, bytesToB64URL } from "@opacity/util/src/b64"
 import { cleanPath } from "@opacity/util/src/path"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { DAG, DAGVertex } from "./dag"
@@ -47,6 +48,8 @@ type MetadataDeleteRes = {
 
 export type MetadataAccessConfig = {
 	metadataNode: string
+
+	logging?: boolean
 
 	crypto: CryptoMiddleware
 	net: NetworkMiddleware
@@ -101,6 +104,15 @@ const unpackChanges = (packed: Uint8Array): Uint8Array[] => {
 	return changes
 }
 
+type MetadataIndex = {
+	privs: {
+		[location: string]: true
+	}
+	encryptKeys: {
+		[location: string]: string
+	}
+}
+
 export class MetadataAccess {
 	config: MetadataAccessConfig
 	dags: { [path: string]: DAG } = {}
@@ -111,6 +123,10 @@ export class MetadataAccess {
 			doc: Automerge.Doc<unknown> | undefined
 		}
 	} = {}
+
+	metadataIndexPath = "/metadata-index"
+
+	_sem: Semaphore = new Semaphore(3)
 
 	constructor (config: MetadataAccessConfig) {
 		this.config = config
@@ -124,12 +140,123 @@ export class MetadataAccess {
 	}
 
 	_markCacheDirty (pub: Uint8Array) {
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 		const cached = this.cache[pubString]
 
 		if (cached) {
 			cached.dirty = true
 		}
+	}
+
+	async getMetadataLocationKeysList (): Promise<Uint8Array[]> {
+		const priv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
+
+		// do not cache
+		const metaIndexObject = (await this._get<MetadataIndex>(priv, undefined, true)) || ({} as MetadataIndex)
+
+		const metaIndexPrivs = [bytesToB64URL(priv)].concat(Object.keys(metaIndexObject.privs))
+
+		const validLocations = (
+			await Promise.all(
+				metaIndexPrivs.map((privString) => {
+					return this._sem.runExclusive(async () => {
+						const priv = b64URLToBytes(privString)
+						const pub = await this.config.crypto.getPublicKey(priv)
+						const pubString = bytesToB64URL(pub)
+
+						const payload = await getPayload<MetadataGetPayload>({
+							crypto: this.config.crypto,
+							payload: {
+								metadataV2Key: pubString,
+							},
+						})
+
+						const res = await this.config.net.POST<MetadataGetRes>(
+							this.config.metadataNode + "/api/v2/metadata/get",
+							undefined,
+							JSON.stringify(payload),
+							(res) => new Response(res).json(),
+						)
+
+						if (((res.data as unknown) as string) == "Key not found") {
+							return undefined
+						}
+
+						return pub
+					})
+				}),
+			)
+		).filter(Boolean) as Uint8Array[]
+
+		return validLocations
+	}
+
+	async _metadataIndexAdd (priv: Uint8Array, encryptKey: Uint8Array | undefined) {
+		const privString = bytesToB64URL(priv)
+		const encryptKeyString = encryptKey ? bytesToB64URL(encryptKey) : undefined
+
+		const metaIndexPriv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
+
+		// fast check
+		const doc = await this._get<MetadataIndex>(metaIndexPriv, undefined, false)
+		if (doc && privString in doc.privs) {
+			return
+		}
+
+		// long set
+		await this._change<MetadataIndex>(
+			metaIndexPriv,
+			undefined,
+			(doc) => {
+				if (privString in doc) {
+					return
+				}
+
+				if (!doc.privs) {
+					doc.privs = {}
+				}
+				if (!doc.encryptKeys) {
+					doc.encryptKeys = {}
+				}
+
+				doc.privs[privString] = true
+				if (encryptKeyString) {
+					doc.encryptKeys[privString] = encryptKeyString
+				}
+			},
+			false,
+			undefined,
+			true,
+		)
+	}
+
+	async _metadataIndexRemove (priv: Uint8Array) {
+		const privString = bytesToB64URL(priv)
+
+		const metaIndexPriv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
+
+		// fast check
+		const doc = await this._get<MetadataIndex>(metaIndexPriv, undefined, false)
+		if (doc && !(privString in doc.privs)) {
+			return
+		}
+
+		// long set
+		await this._change<MetadataIndex>(
+			metaIndexPriv,
+			undefined,
+			(doc) => {
+				if (privString in doc) {
+					return
+				}
+
+				delete doc.privs[privString]
+				delete doc.encryptKeys[privString]
+			},
+			false,
+			undefined,
+			true,
+		)
 	}
 
 	async change<T = unknown> (
@@ -143,24 +270,28 @@ export class MetadataAccess {
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
+		await this._metadataIndexAdd(priv, undefined)
+
 		return await this._change<T>(priv, description, fn, false, undefined, markCacheDirty)
 	}
 
 	async changePublic<T = unknown> (
 		priv: Uint8Array,
-		description: string,
+		description: string | undefined,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 		encryptKey: Uint8Array,
 		markCacheDirty = false,
 	): Promise<Automerge.Doc<T>> {
 		// console.log("changePublic(", priv, description, fn, encryptKey, ")")
 
+		await this._metadataIndexAdd(priv, encryptKey)
+
 		return await this._change<T>(priv, description, fn, true, encryptKey, markCacheDirty)
 	}
 
 	async _change<T = unknown> (
 		priv: Uint8Array,
-		description: string,
+		description: string | undefined,
 		fn: Automerge.ChangeFn<Automerge.Proxy<T>>,
 		isPublic: boolean,
 		encryptKey?: Uint8Array,
@@ -169,7 +300,7 @@ export class MetadataAccess {
 		// console.log("_change(", priv, description, fn, isPublic, encryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 
 		// sync
 		const curDoc = (await this._get<T>(priv, undefined, markCacheDirty)) || Automerge.init<T>()
@@ -177,11 +308,15 @@ export class MetadataAccess {
 		const dag = this.dags[pubString]
 
 		// change
-		const newDoc = Automerge.change(curDoc, description, fn)
+		const newDoc = description ? Automerge.change(curDoc, description, fn) : Automerge.change(curDoc, fn)
 
 		// commit
 
 		const changes = Automerge.getChanges(curDoc, newDoc)
+
+		if (!changes.length) {
+			return curDoc
+		}
 
 		const encrypted = await this.config.crypto.encrypt(encryptKey || sha256(priv), packChanges(changes))
 		const v = new DAGVertex(encrypted)
@@ -193,10 +328,10 @@ export class MetadataAccess {
 			crypto: this.config.crypto,
 			payload: {
 				isPublic,
-				metadataV2Edges: edges.map((edge) => bytesToB64(edge.binary)),
+				metadataV2Edges: edges.map((edge) => bytesToB64URL(edge.binary)),
 				metadataV2Key: pubString,
-				metadataV2Sig: bytesToB64(await this.config.crypto.sign(priv, await dag.digest(v.id, sha256))),
-				metadataV2Vertex: bytesToB64(v.binary),
+				metadataV2Sig: bytesToB64URL(await this.config.crypto.sign(priv, await dag.digest(v.id, sha256))),
+				metadataV2Vertex: bytesToB64URL(v.binary),
 			},
 		})
 
@@ -239,17 +374,19 @@ export class MetadataAccess {
 		// console.log("_get(", priv, decryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 
 		const cached = this.cache[pubString]
 
 		if (markCacheDirty || !cached || cached.dirty == true) {
-			console.warn(
-				"Cache: cache not used for",
-				pubString,
-				"because",
-				!cached ? "item was not found in cache" : "cache entry was marked dirty",
-			)
+			if (this.config.logging) {
+				console.warn(
+					"Cache: cache not used for",
+					pubString,
+					"because",
+					!cached ? "item was not found in cache" : "cache entry was marked dirty",
+				)
+			}
 			const payload = await getPayload<MetadataGetPayload>({
 				crypto: this.config.crypto,
 				payload: {
@@ -268,11 +405,13 @@ export class MetadataAccess {
 				return undefined
 			}
 
-			const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
+			const dag = DAG.fromBinary(b64URLToBytes(res.data.metadataV2))
 			this.dags[pubString] = dag
 		}
 		else {
-			console.info("Cache: using cached value for", pubString)
+			if (this.config.logging) {
+				console.info("Cache: using cached value for", pubString)
+			}
 
 			cached.lastAccess = Date.now()
 
@@ -315,17 +454,19 @@ export class MetadataAccess {
 		// console.log("_getPublic", priv, decryptKey, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 
 		const cached = this.cache[pubString]
 
 		if (markCacheDirty || !cached || cached.dirty == true) {
-			console.warn(
-				"Cache: cache not used for",
-				pubString,
-				"because",
-				!cached ? "item was not found in cache" : "cache entry was marked dirty",
-			)
+			if (this.config.logging) {
+				console.warn(
+					"Cache: cache not used for",
+					pubString,
+					"because",
+					!cached ? "item was not found in cache" : "cache entry was marked dirty",
+				)
+			}
 
 			const res = await this.config.net.POST<MetadataGetRes>(
 				this.config.metadataNode + "/api/v2/metadata/get-public",
@@ -339,11 +480,13 @@ export class MetadataAccess {
 				(res) => new Response(res).json(),
 			)
 
-			const dag = DAG.fromBinary(b64ToBytes(res.data.metadataV2))
+			const dag = DAG.fromBinary(b64URLToBytes(res.data.metadataV2))
 			this.dags[pubString] = dag
 		}
 		else {
-			console.info("Cache: using cached value for", pubString)
+			if (this.config.logging) {
+				console.info("Cache: using cached value for", pubString)
+			}
 
 			return cached.doc as Automerge.Doc<T>
 		}
@@ -375,20 +518,23 @@ export class MetadataAccess {
 		path = cleanPath(path)
 
 		const priv = await this.config.crypto.derive(undefined, path)
-		return await this._delete(priv)
+
+		await this._delete(priv)
+		await this._metadataIndexRemove(priv)
 	}
 
 	async deletePublic (priv: Uint8Array): Promise<void> {
 		// console.log("deletePublic(", priv, ")")
 
-		return await this._delete(priv)
+		await this._delete(priv)
+		await this._metadataIndexRemove(priv)
 	}
 
 	async _delete (priv: Uint8Array): Promise<void> {
 		// console.log("_delete(", priv, ")")
 
 		const pub = await this.config.crypto.getPublicKey(priv)
-		const pubString = bytesToB64(pub)
+		const pubString = bytesToB64URL(pub)
 
 		const payload = await getPayload<MetadataDeletePayload>({
 			crypto: this.config.crypto,

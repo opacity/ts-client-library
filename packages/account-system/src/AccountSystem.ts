@@ -3,18 +3,35 @@ import { posix } from "path-browserify"
 import Automerge from "automerge/src/automerge"
 
 import { arraysEqual } from "@opacity/util/src/arrayEquality"
-import { bytesToB64 } from "@opacity/util/src/b64"
+import { bytesToB64URL } from "@opacity/util/src/b64"
 import { bytesToHex } from "@opacity/util/src/hex"
 import { cleanPath, isPathChild } from "@opacity/util/src/path"
 import { entropyToKey } from "@opacity/util/src/mnemonic"
 import { MetadataAccess } from "./MetadataAccess"
+import { arrayMerge } from "@opacity/util/src/arrayMerge"
+
+export type FilePrivateInfo = {
+	// 64 bytes
+	handle: Uint8Array | null
+}
+
+export type FilePublicInfo = {
+	// 32 bytes
+	location: Uint8Array | null
+	shortLinks: string[]
+}
+
+export type FilePublicInfoMinimal = {
+	location: Uint8Array | null
+}
 
 export type FilesIndexEntry = {
 	location: Uint8Array
 	finished: boolean
-	public: boolean
-	handle: Uint8Array
+	private: FilePrivateInfo
+	public: FilePublicInfoMinimal
 	deleted: boolean
+	errored: boolean
 }
 
 export type FilesIndex = { files: FilesIndexEntry[] }
@@ -27,7 +44,6 @@ export type FileCreationMetadata = {
 
 export type FileMetadata = {
 	location: Uint8Array
-	handle: Uint8Array
 	name: string
 	folderDerive: Uint8Array
 	size: number
@@ -35,7 +51,8 @@ export type FileMetadata = {
 	modified: number
 	type: string
 	finished: boolean
-	public: boolean
+	private: FilePrivateInfo
+	public: FilePublicInfo
 }
 
 export type FoldersIndexEntry = {
@@ -61,8 +78,14 @@ export type FolderMetadata = {
 }
 
 export type ShareIndexEntry = {
+	// 32 bytes
 	locationKey: Uint8Array
+	// 32 bytes
 	encryptionKey: Uint8Array
+	// 64 bytes []
+	fileHandles: Uint8Array[]
+	// 32 bytes []
+	fileLocations: Uint8Array[]
 }
 
 export type ShareIndex = { shared: ShareIndexEntry[] }
@@ -80,15 +103,14 @@ export type ShareFileMetadataInit = {
 }
 
 export type ShareFileMetadata = {
-	handle: Uint8Array
 	name: string
 	path: string
 	size: number
 	uploaded: number
 	modified: number
 	type: string
-	finished: boolean
-	public: boolean
+	private: FilePrivateInfo
+	public: FilePublicInfoMinimal
 }
 
 export type ShareMetadata = {
@@ -170,6 +192,63 @@ const unfreezeUint8Array = (arr: Automerge.FreezeObject<Uint8Array>) => {
 	return new Uint8Array(Object.values<number>(arr))
 }
 
+const unfreezeFileMetadata = (doc: Automerge.FreezeObject<FileMetadata>): FileMetadata => {
+	return {
+		location: unfreezeUint8Array(doc.location),
+		name: doc.name,
+		folderDerive: unfreezeUint8Array(doc.folderDerive),
+		size: doc.size,
+		uploaded: doc.uploaded,
+		modified: doc.modified,
+		type: doc.type,
+		finished: !!doc.finished,
+		private: {
+			handle: doc?.private?.handle ? unfreezeUint8Array(doc.private.handle) : null,
+		},
+		public: {
+			location: doc?.public?.location ? unfreezeUint8Array(doc.public.location) : null,
+			shortLinks: doc.public.shortLinks.map((sl) => sl) || [],
+		},
+	}
+}
+
+const unfreezeFolderMetadata = (doc: Automerge.FreezeObject<FolderMetadata>): FolderMetadata => {
+	return {
+		location: unfreezeUint8Array(doc.location),
+		name: doc.name,
+		path: doc.path,
+		size: doc.size,
+		uploaded: doc.uploaded,
+		modified: doc.modified,
+		files: doc.files.map((file) => ({
+			location: unfreezeUint8Array(file.location),
+			name: file.name,
+		})),
+	}
+}
+
+const unfreezeShareMetadata = (doc: Automerge.FreezeObject<ShareMetadata>): ShareMetadata => {
+	return {
+		locationKey: unfreezeUint8Array(doc.locationKey),
+		encryptionKey: unfreezeUint8Array(doc.encryptionKey),
+		dateShared: doc.dateShared,
+		files: doc.files.map((file) => ({
+			name: file.name,
+			path: file.path,
+			size: file.size,
+			uploaded: file.uploaded,
+			modified: file.modified,
+			type: file.type,
+			private: {
+				handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
+			},
+			public: {
+				location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
+			},
+		})),
+	}
+}
+
 export type AccountSystemConfig = {
 	metadataAccess: MetadataAccess
 }
@@ -204,7 +283,7 @@ export class AccountSystem {
 	///////////////////////////////
 
 	getFileDerivePath (location: Uint8Array): string {
-		return this.prefix + "/file/" + bytesToB64(location)
+		return this.prefix + "/file/" + bytesToB64URL(location)
 	}
 
 	async getFilesIndex (markCacheDirty = false): Promise<FilesIndex> {
@@ -226,56 +305,96 @@ export class AccountSystem {
 			files: filesIndex.files.map((file) => ({
 				location: unfreezeUint8Array(file.location),
 				finished: !!file.finished,
-				public: !!file.public,
-				handle: unfreezeUint8Array(file.handle),
+				private: {
+					handle: file?.private?.handle ? unfreezeUint8Array(file.private.handle) : null,
+				},
+				public: {
+					location: file?.public?.location ? unfreezeUint8Array(file.public.location) : null,
+				},
 				deleted: !!file.deleted,
+				errored: false,
 			})),
 		}
 	}
 
-	async getFileLocationByHandle (handle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
-		// console.log("getFileLocationByHandle(", handle, ")")
+	async getFileMetadataLocationByFileHandle (fileHandle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
+		// console.log("getFileMetadataLocationByFileHandle(", fileHandle, ")")
 
-		return await this._m.runExclusive(() => this._getFileLocationByHandle(handle, markCacheDirty))
+		return await this._m.runExclusive(() => this._getFileMetadataLocationByFileHandle(fileHandle, markCacheDirty))
 	}
 
-	async _getFileLocationByHandle (handle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
-		// console.log("_getFileLocationByHandle(", handle, ")")
+	async _getFileMetadataLocationByFileHandle (fileHandle: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
+		// console.log("_getFileMetadataLocationByFileHandle(", fileHandle, ")")
 
 		const filesIndex = await this._getFilesIndex(markCacheDirty)
 
-		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.handle, handle))
+		const fileEntry = filesIndex.files.find(
+			(file) => file.private.handle && arraysEqual(file.private.handle, fileHandle),
+		)
 
 		if (!fileEntry) {
-			throw new AccountSystemNotFoundError("file of handle", bytesToHex(handle.slice(0, 32)) + "...")
+			throw new AccountSystemNotFoundError("file of handle", bytesToHex(fileHandle.slice(0, 32)) + "...")
 		}
 
 		return fileEntry.location
 	}
 
-	async getFileIndexEntryByLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
-		// console.log("getFileIndexEntryByLocation(", location, ")")
+	async getFileMetadataLocationByFileLocation (fileLocation: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
+		// console.log("getFileMetadataLocationByFileLocation(", fileLocation, ")")
 
-		return await this._m.runExclusive(() => this._getFileIndexEntryByLocation(location, markCacheDirty))
+		return await this._m.runExclusive(() => this._getFileMetadataLocationByFileLocation(fileLocation, markCacheDirty))
 	}
 
-	async _getFileIndexEntryByLocation (location: Uint8Array, markCacheDirty = false): Promise<FilesIndexEntry> {
-		// console.log("_getFileIndexEntryByLocation(", location, ")")
+	async _getFileMetadataLocationByFileLocation (fileLocation: Uint8Array, markCacheDirty = false): Promise<Uint8Array> {
+		// console.log("_getFileMetadataLocationByFileLocation(", fileLocation, ")")
+
+		const filesIndex = await this._getFilesIndex(markCacheDirty)
+
+		const fileEntry = filesIndex.files.find(
+			(file) => file.public.location && arraysEqual(file.public.location, fileLocation),
+		)
+
+		if (!fileEntry) {
+			throw new AccountSystemNotFoundError("file of location", bytesToHex(fileLocation.slice(0, 32)) + "...")
+		}
+
+		return fileEntry.location
+	}
+
+	async getFileIndexEntryByFileMetadataLocation (
+		location: Uint8Array,
+		markCacheDirty = false,
+	): Promise<FilesIndexEntry> {
+		// console.log("getFileIndexEntryByFileMetadataLocation(", location, ")")
+
+		return await this._m.runExclusive(() => this._getFileIndexEntryByFileMetadataLocation(location, markCacheDirty))
+	}
+
+	async _getFileIndexEntryByFileMetadataLocation (
+		location: Uint8Array,
+		markCacheDirty = false,
+	): Promise<FilesIndexEntry> {
+		// console.log("_getFileIndexEntryByFileMetadataLocation(", location, ")")
 
 		const filesIndex = await this._getFilesIndex(markCacheDirty)
 		const fileEntry = filesIndex.files.find((file) => arraysEqual(file.location, location))
 
 		if (!fileEntry) {
 			// TODO: orphan?
-			throw new AccountSystemNotFoundError("file", bytesToB64(location))
+			throw new AccountSystemNotFoundError("file", bytesToB64URL(location))
 		}
 
 		return {
 			location: fileEntry.location,
 			finished: !!fileEntry.finished,
-			public: !!fileEntry.public,
-			handle: fileEntry.handle,
+			private: {
+				handle: fileEntry.private.handle,
+			},
+			public: {
+				location: fileEntry.public.location,
+			},
 			deleted: !!fileEntry.deleted,
+			errored: !!fileEntry.errored,
 		}
 	}
 
@@ -296,42 +415,37 @@ export class AccountSystem {
 			throw new AccountSystemNotFoundError("file", filePath)
 		}
 
-		return {
-			location: unfreezeUint8Array(doc.location),
-			handle: unfreezeUint8Array(doc.handle),
-			name: doc.name,
-			folderDerive: unfreezeUint8Array(doc.folderDerive),
-			size: doc.size,
-			uploaded: doc.uploaded,
-			modified: doc.modified,
-			type: doc.type,
-			finished: !!doc.finished,
-			public: !!doc.public,
-		}
+		return unfreezeFileMetadata(doc)
 	}
 
 	async addUpload (
-		handle: Uint8Array,
+		// 32 bytes
+		fileLocation: Uint8Array,
+		// 32 bytes
+		fileEncryptionKey: Uint8Array | undefined,
 		path: string,
 		filename: string,
 		meta: FileCreationMetadata,
 		pub: boolean,
 		markCacheDirty = false,
 	): Promise<FileMetadata> {
-		// console.log("addUpload(", handle, path, filename, meta, pub, ")")
+		// console.log("addUpload(", fileLocation, fileEncryptionKey, path, filename, meta, pub, ")")
 
-		return await this._m.runExclusive(() => this._addUpload(handle, path, filename, meta, pub, markCacheDirty))
+		return await this._m.runExclusive(() =>
+			this._addUpload(fileLocation, fileEncryptionKey, path, filename, meta, pub, markCacheDirty),
+		)
 	}
 
 	async _addUpload (
-		handle: Uint8Array,
+		fileLocation: Uint8Array,
+		fileEncryptionKey: Uint8Array | undefined,
 		path: string,
 		filename: string,
 		meta: FileCreationMetadata,
 		pub: boolean,
 		markCacheDirty = false,
 	): Promise<FileMetadata> {
-		// console.log("_addUpload(", handle, path, filename, meta, pub, ")")
+		// console.log("_addUpload(", fileLocation, fileEncryptionKey, path, filename, meta, pub, ")")
 
 		path = cleanPath(path)
 		validateDirectoryPath(path)
@@ -340,51 +454,39 @@ export class AccountSystem {
 		const folder = await this._addFolder(path, markCacheDirty)
 		const folderDerive = folder.location
 
-		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
-		const filePath = this.getFileDerivePath(location)
+		const metaLocation = await this.config.metadataAccess.config.crypto.getRandomValues(32)
+		const filePath = this.getFileDerivePath(metaLocation)
+
+		const fileHandle = fileEncryptionKey ? arrayMerge(fileLocation, fileEncryptionKey) : fileLocation
 
 		await this.config.metadataAccess.change<FilesIndex>(
 			this.indexes.files,
-			`Add file "${bytesToB64(location)}" to file index`,
+			`Add file "${bytesToB64URL(metaLocation)}" to file index`,
 			(doc) => {
 				if (!doc.files) {
 					doc.files = []
 				}
 				doc.files.push({
-					location,
+					location: metaLocation,
 					finished: false,
-					public: pub,
-					handle,
+					private: {
+						handle: pub ? null : fileHandle,
+					},
+					public: {
+						location: pub ? fileLocation : null,
+					},
 					deleted: false,
+					errored: false,
 				})
-			},
-			markCacheDirty,
-		)
-
-		await this.config.metadataAccess.change<FolderMetadata>(
-			this.getFolderDerivePath(folderDerive),
-			`Add file "${bytesToB64(location)}" to folder`,
-			(doc) => {
-				if (!doc.files) {
-					doc.files = []
-				}
-				doc.files.push({
-					name: filename,
-					location: location,
-				})
-
-				doc.modified = Date.now()
-				doc.size++
 			},
 			markCacheDirty,
 		)
 
 		const file = await this.config.metadataAccess.change<FileMetadata>(
 			filePath,
-			`Init file metadata for "${bytesToB64(location)}"`,
+			`Init file metadata for "${bytesToB64URL(metaLocation)}"`,
 			(doc) => {
-				doc.location = location
-				doc.handle = handle
+				doc.location = metaLocation
 				doc.name = filename
 				doc.folderDerive = folderDerive
 				doc.modified = meta.lastModified
@@ -392,23 +494,18 @@ export class AccountSystem {
 				doc.type = meta.type
 				doc.uploaded = Date.now()
 				doc.finished = false
-				doc.public = pub
+				doc.private = {
+					handle: pub ? null : fileHandle,
+				}
+				doc.public = {
+					location: pub ? fileLocation : null,
+					shortLinks: [],
+				}
 			},
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(file.location),
-			handle: unfreezeUint8Array(file.handle),
-			name: file.name,
-			folderDerive: unfreezeUint8Array(file.folderDerive),
-			size: file.size,
-			uploaded: file.uploaded,
-			modified: file.modified,
-			type: file.type,
-			finished: !!file.finished,
-			public: !!file.public,
-		}
+		return unfreezeFileMetadata(file)
 	}
 
 	async finishUpload (location: Uint8Array, markCacheDirty = false): Promise<void> {
@@ -429,16 +526,34 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
+		await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
+			`Add file "${bytesToB64URL(location)}" to folder`,
+			(doc) => {
+				if (!doc.files) {
+					doc.files = []
+				}
+				doc.files.push({
+					name: fileMeta.name,
+					location: location,
+				})
+
+				doc.modified = Date.now()
+				doc.size++
+			},
+			markCacheDirty,
+		)
+
 		await this.config.metadataAccess.change<FilesIndex>(
 			this.indexes.files,
-			`Mark upload ${bytesToB64(location)} finished`,
+			`Mark upload ${bytesToB64URL(location)} finished`,
 			(doc) => {
 				const fileEntry = doc.files.find((file) => arraysEqual(location, file.location))
 
 				if (!fileEntry) {
 					throw new AccountSystemNotFoundError(
 						"file entry",
-						`"${bytesToB64(location)}" in "${bytesToB64(unfreezeUint8Array(fileMeta.folderDerive))}"`,
+						`"${bytesToB64URL(location)}" in "${bytesToB64URL(unfreezeUint8Array(fileMeta.folderDerive))}"`,
 					)
 				}
 
@@ -446,6 +561,159 @@ export class AccountSystem {
 			},
 			markCacheDirty,
 		)
+	}
+
+	async setFilePrivateHandle (
+		location: Uint8Array,
+		newFileHandle: Uint8Array | null,
+		markCacheDirty = false,
+	): Promise<FileMetadata> {
+		// console.log("setFileHandle(", location, newFileHandle, ")")
+
+		return await this._m.runExclusive(() => this._setFilePrivateHandle(location, newFileHandle, markCacheDirty))
+	}
+
+	async _setFilePrivateHandle (
+		location: Uint8Array,
+		newFileHandle: Uint8Array | null,
+		markCacheDirty = false,
+	): Promise<FileMetadata> {
+		// console.log("_setFileHandle(", location, newFileHandle, ")")
+
+		const filesIndex = await this._getFilesIndex(markCacheDirty)
+		const fileEntry = filesIndex.files.find((fileEntry) => arraysEqual(fileEntry.location, location))
+
+		if (!fileEntry) {
+			throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
+		}
+
+		await this.config.metadataAccess.change<FilesIndex>(
+			this.indexes.files,
+			`Change handle for file "${bytesToB64URL(location)}"`,
+			(doc) => {
+				const entryIndex = doc.files.findIndex((fileEntry) => arraysEqual(fileEntry.location, location))
+
+				doc.files[entryIndex].private.handle = newFileHandle
+			},
+			markCacheDirty,
+		)
+
+		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(location),
+			"Change handle",
+			(doc) => {
+				doc.private.handle = newFileHandle
+			},
+			markCacheDirty,
+		)
+
+		return unfreezeFileMetadata(fileMetaDoc)
+	}
+
+	async setFilePublicLocation (
+		location: Uint8Array,
+		newFileLocation: Uint8Array | null,
+		markCacheDirty = false,
+	): Promise<FileMetadata> {
+		// console.log("setFilePublicLocation(", location, newFileLocation, ")")
+
+		return await this._m.runExclusive(() => this._setFilePublicLocation(location, newFileLocation, markCacheDirty))
+	}
+
+	async _setFilePublicLocation (
+		location: Uint8Array,
+		newFileLocation: Uint8Array | null,
+		markCacheDirty = false,
+	): Promise<FileMetadata> {
+		// console.log("_setFilePublicLocation(", location, newFileLocation, ")")
+
+		const filesIndex = await this._getFilesIndex(markCacheDirty)
+		const fileEntry = filesIndex.files.find((fileEntry) => arraysEqual(fileEntry.location, location))
+
+		if (!fileEntry) {
+			throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
+		}
+
+		await this.config.metadataAccess.change<FilesIndex>(
+			this.indexes.files,
+			`Change file location for file "${bytesToB64URL(location)}"`,
+			(doc) => {
+				const entryIndex = doc.files.findIndex((fileEntry) => arraysEqual(fileEntry.location, location))
+
+				doc.files[entryIndex].public.location = newFileLocation
+			},
+			markCacheDirty,
+		)
+
+		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(location),
+			"Change file location",
+			(doc) => {
+				doc.public.location = newFileLocation
+			},
+			markCacheDirty,
+		)
+
+		return unfreezeFileMetadata(fileMetaDoc)
+	}
+
+	async addFilePublicShortlink (
+		location: Uint8Array,
+		shortlink: string,
+		markCacheDirty = false,
+	): Promise<FileMetadata> {
+		// console.log("addFilePublicShortlink(", location, shortlink, ")")
+
+		return await this._m.runExclusive(() => this._addFilePublicShortlink(location, shortlink, markCacheDirty))
+	}
+
+	async _addFilePublicShortlink (
+		location: Uint8Array,
+		shortlink: string,
+		markCacheDirty = false,
+	): Promise<FileMetadata> {
+		// console.log("_addFilePublicShortlink(", location, shortlink, ")")
+
+		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(location),
+			"Add shortlink",
+			(doc) => {
+				doc.public.shortLinks.push(shortlink)
+			},
+			markCacheDirty,
+		)
+
+		return unfreezeFileMetadata(fileMetaDoc)
+	}
+
+	async removeFilePublicShortlink (
+		location: Uint8Array,
+		shortlink: string,
+		markCacheDirty = false,
+	): Promise<FileMetadata> {
+		// console.log("removeFilePublicShortlink(", location, shortlink, ")")
+
+		return await this._m.runExclusive(() => this._removeFilePublicShortlink(location, shortlink, markCacheDirty))
+	}
+
+	async _removeFilePublicShortlink (
+		location: Uint8Array,
+		shortlink: string,
+		markCacheDirty = false,
+	): Promise<FileMetadata> {
+		// console.log("_removeFilePublicShortlink(", location, shortlink, ")")
+
+		const fileMetaDoc = await this.config.metadataAccess.change<FileMetadata>(
+			this.getFileDerivePath(location),
+			"Remove shortlink",
+			(doc) => {
+				const shortlinkIndex = doc.public.shortLinks.indexOf(shortlink)
+				doc.public.shortLinks.splice(shortlinkIndex, 1)
+			},
+			markCacheDirty,
+		)
+
+		return unfreezeFileMetadata(fileMetaDoc)
 	}
 
 	async renameFile (location: Uint8Array, newName: string, markCacheDirty = false): Promise<FileMetadata> {
@@ -459,9 +727,9 @@ export class AccountSystem {
 
 		validateFilename(newName)
 
-		const fileIndexEntry = await this._getFileIndexEntryByLocation(location, markCacheDirty)
+		const fileIndexEntry = await this._getFileIndexEntryByFileMetadataLocation(location, markCacheDirty)
 		if (!fileIndexEntry) {
-			throw new AccountSystemNotFoundError("file", bytesToB64(location))
+			throw new AccountSystemNotFoundError("file", bytesToB64URL(location))
 		}
 
 		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
@@ -475,14 +743,14 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
-			`Rename file ${bytesToB64(location)}`,
+			`Rename file ${bytesToB64URL(location)}`,
 			(doc) => {
 				const fileEntry = doc.files.find((file) => arraysEqual(location, file.location))
 
 				if (!fileEntry) {
 					throw new AccountSystemNotFoundError(
 						"file entry",
-						`"${bytesToB64(location)}" in "${bytesToB64(unfreezeUint8Array(fileMeta.folderDerive))}"`,
+						`"${bytesToB64URL(location)}" in "${bytesToB64URL(unfreezeUint8Array(fileMeta.folderDerive))}"`,
 					)
 				}
 
@@ -491,18 +759,7 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(fileMeta.location),
-			handle: unfreezeUint8Array(fileMeta.handle),
-			name: fileMeta.name,
-			folderDerive: unfreezeUint8Array(fileMeta.folderDerive),
-			size: fileMeta.size,
-			uploaded: fileMeta.uploaded,
-			modified: fileMeta.modified,
-			type: fileMeta.type,
-			finished: !!fileMeta.finished,
-			public: !!fileMeta.public,
-		}
+		return unfreezeFileMetadata(fileMeta)
 	}
 
 	async moveFile (location: Uint8Array, newPath: string, markCacheDirty = false): Promise<FileMetadata> {
@@ -526,7 +783,7 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(newFolder.location),
-			`Move file ${bytesToB64(location)}`,
+			`Move file ${bytesToB64URL(location)}`,
 			(doc) => {
 				doc.files.push({
 					location,
@@ -541,14 +798,14 @@ export class AccountSystem {
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(oldFileMeta.folderDerive),
-			`Move file ${bytesToB64(location)}`,
+			`Move file ${bytesToB64URL(location)}`,
 			(doc) => {
 				const fileEntryIndex = doc.files.findIndex((file) => arraysEqual(location, file.location))
 
 				if (fileEntryIndex == -1) {
 					throw new AccountSystemNotFoundError(
 						"file entry",
-						`"${bytesToB64(location)}" in "${bytesToB64(oldFileMeta.folderDerive)}"`,
+						`"${bytesToB64URL(location)}" in "${bytesToB64URL(oldFileMeta.folderDerive)}"`,
 					)
 				}
 
@@ -569,19 +826,9 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(newFileMeta.location),
-			handle: unfreezeUint8Array(newFileMeta.handle),
-			name: newFileMeta.name,
-			folderDerive: unfreezeUint8Array(newFileMeta.folderDerive),
-			size: newFileMeta.size,
-			uploaded: newFileMeta.uploaded,
-			modified: newFileMeta.modified,
-			type: newFileMeta.type,
-			finished: !!newFileMeta.finished,
-			public: !!newFileMeta.public,
-		}
+		return unfreezeFileMetadata(newFileMeta)
 	}
+
 	async removeFile (location: Uint8Array, markCacheDirty = false) {
 		// console.log("removeFile(", location, ")")
 
@@ -598,7 +845,7 @@ export class AccountSystem {
 				const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
 				if (!fileEntry) {
-					throw new AccountSystemNotFoundError("file entry", bytesToB64(location))
+					throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
 				}
 
 				fileEntry.deleted = true
@@ -626,7 +873,7 @@ export class AccountSystem {
 	///////////////////////////////
 
 	getFolderDerivePath (location: Uint8Array): string {
-		return this.prefix + "/folder/" + bytesToB64(location)
+		return this.prefix + "/folder/" + bytesToB64URL(location)
 	}
 
 	async getFoldersIndex (markCacheDirty = false): Promise<FoldersIndex> {
@@ -704,6 +951,58 @@ export class AccountSystem {
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
 	}
 
+	async getAllFoldersInFolderRecursivelyByPath (path: string, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
+		// console.log("getAllFoldersInFolderRecursivelyByPath(", path, ")")
+
+		return await this._m.runExclusive(() => this._getAllFoldersInFolderRecursivelyByPath(path, markCacheDirty))
+	}
+
+	async _getAllFoldersInFolderRecursivelyByPath (path: string, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
+		// console.log("_getAllFoldersInFolderRecursivelyByPath(", path, ")")
+
+		path = cleanPath(path)
+		validateDirectoryPath(path)
+
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
+
+		return (
+			await Promise.all(
+				foldersIndex.folders
+					.filter((folder) => isPathChild(path, folder.path))
+					.map(async (folder) => [folder, await this._getAllFoldersInFolderRecursivelyByPath(folder.path)].flat()),
+			)
+		).flat()
+	}
+
+	async getAllFilesInFolderRecursivelyByPath (path: string, markCacheDirty = false): Promise<FilesIndexEntry[]> {
+		// console.log("getAllFoldersInFolderRecursivelyByPath(", path, ")")
+
+		return await this._m.runExclusive(() => this._getAllFilesInFolderRecursivelyByPath(path, markCacheDirty))
+	}
+
+	async _getAllFilesInFolderRecursivelyByPath (path: string, markCacheDirty = false): Promise<FilesIndexEntry[]> {
+		// console.log("_getAllFoldersInFolderRecursivelyByPath(", path, ")")
+
+		path = cleanPath(path)
+		validateDirectoryPath(path)
+
+		const folderMeta = await this._getFolderMetadataByPath(path)
+		const foldersInFolder = await this._getAllFoldersInFolderRecursivelyByPath(path, markCacheDirty)
+		const filesIndex = await this._getFilesIndex()
+
+		const filesInFolder = (
+			await Promise.all(
+				foldersInFolder.map(async (folder) => (await this._getFolderMetadataByPath(folder.path, markCacheDirty)).files),
+			)
+		).flat()
+
+		return filesIndex.files.filter((fileEntry) =>
+			([] as FolderFileEntry[])
+				.concat(folderMeta.files, filesInFolder)
+				.some((folderFileEntry) => arraysEqual(folderFileEntry.location, fileEntry.location)),
+		)
+	}
+
 	async getFoldersInFolderByLocation (location: Uint8Array, markCacheDirty = false): Promise<FoldersIndexEntry[]> {
 		// console.log("getFoldersInFolderByLocation(", location, ")")
 
@@ -718,12 +1017,90 @@ export class AccountSystem {
 		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
 
 		if (!folderEntry) {
-			throw new AccountSystemNotFoundError("folder entry", bytesToB64(location))
+			throw new AccountSystemNotFoundError("folder entry", bytesToB64URL(location))
 		}
 
 		const path = folderEntry.path
 
 		return foldersIndex.folders.filter((folder) => isPathChild(path, folder.path))
+	}
+
+	async getAllFoldersInFolderRecursivelyByLocation (
+		location: Uint8Array,
+		markCacheDirty = false,
+	): Promise<FoldersIndexEntry[]> {
+		// console.log("getAllFoldersInFolderRecursivelyByLocation(", location, ")")
+
+		return await this._m.runExclusive(() => this._getAllFoldersInFolderRecursivelyByLocation(location, markCacheDirty))
+	}
+
+	async _getAllFoldersInFolderRecursivelyByLocation (
+		location: Uint8Array,
+		markCacheDirty = false,
+	): Promise<FoldersIndexEntry[]> {
+		// console.log("_getAllFoldersInFolderRecursivelyByLocation(", location, ")")
+
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
+
+		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
+
+		if (!folderEntry) {
+			throw new AccountSystemNotFoundError("folder entry", bytesToB64URL(location))
+		}
+
+		const path = folderEntry.path
+
+		return (
+			await Promise.all(
+				foldersIndex.folders
+					.filter((folder) => isPathChild(path, folder.path))
+					.map(async (folder) =>
+						[folder, await this._getAllFoldersInFolderRecursivelyByLocation(folder.location)].flat(),
+					),
+			)
+		).flat()
+	}
+
+	async getAllFilesInFolderRecursivelyByLocation (
+		location: Uint8Array,
+		markCacheDirty = false,
+	): Promise<FilesIndexEntry[]> {
+		// console.log("getAllFoldersInFolderRecursivelyByLocation(", location, ")")
+
+		return await this._m.runExclusive(() => this._getAllFilesInFolderRecursivelyByLocation(location, markCacheDirty))
+	}
+
+	async _getAllFilesInFolderRecursivelyByLocation (
+		location: Uint8Array,
+		markCacheDirty = false,
+	): Promise<FilesIndexEntry[]> {
+		// console.log("_getAllFoldersInFolderRecursivelyByLocation(", location, ")")
+
+		const foldersIndex = await this._getFoldersIndex(markCacheDirty)
+
+		const folderEntry = foldersIndex.folders.find((folder) => arraysEqual(folder.location, location))
+
+		if (!folderEntry) {
+			throw new AccountSystemNotFoundError("folder entry", bytesToB64URL(location))
+		}
+
+		const folderMeta = await this._getFolderMetadataByLocation(location)
+		const foldersInFolder = await this._getAllFoldersInFolderRecursivelyByLocation(folderEntry.location, markCacheDirty)
+		const filesIndex = await this._getFilesIndex()
+
+		const filesInFolder = (
+			await Promise.all(
+				foldersInFolder.map(
+					async (folder) => (await this._getFolderMetadataByLocation(folder.location, markCacheDirty)).files,
+				),
+			)
+		).flat()
+
+		return filesIndex.files.filter((fileEntry) =>
+			([] as FolderFileEntry[])
+				.concat(folderMeta.files, filesInFolder)
+				.some((folderFileEntry) => arraysEqual(folderFileEntry.location, fileEntry.location)),
+		)
 	}
 
 	async getFolderMetadataByPath (path: string, markCacheDirty = false): Promise<FolderMetadata> {
@@ -759,18 +1136,7 @@ export class AccountSystem {
 			throw new AccountSystemNotFoundError("folder", folderPath)
 		}
 
-		return {
-			location: unfreezeUint8Array(doc.location),
-			name: doc.name,
-			path: doc.path,
-			size: doc.size,
-			uploaded: doc.uploaded,
-			modified: doc.modified,
-			files: doc.files.map((fileEntry) => ({
-				location: unfreezeUint8Array(fileEntry.location),
-				name: fileEntry.name,
-			})),
-		}
+		return unfreezeFolderMetadata(doc)
 	}
 
 	async addFolder (path: string, markCacheDirty = false): Promise<FolderMetadata> {
@@ -833,18 +1199,7 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(doc.location),
-			name: doc.name,
-			path: doc.path,
-			size: doc.size,
-			uploaded: doc.uploaded,
-			modified: doc.modified,
-			files: doc.files.map((file) => ({
-				location: unfreezeUint8Array(file.location),
-				name: file.name,
-			})),
-		}
+		return unfreezeFolderMetadata(doc)
 	}
 
 	async renameFolder (path: string, newName: string, markCacheDirty = false): Promise<FolderMetadata> {
@@ -934,18 +1289,7 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		return {
-			location: unfreezeUint8Array(doc.location),
-			name: doc.name,
-			path: doc.path,
-			size: doc.size,
-			uploaded: doc.uploaded,
-			modified: doc.modified,
-			files: doc.files.map((file) => ({
-				location: unfreezeUint8Array(file.location),
-				name: file.name,
-			})),
-		}
+		return unfreezeFolderMetadata(doc)
 	}
 
 	async removeFolderByPath (path: string, markCacheDirty = false): Promise<void> {
@@ -976,20 +1320,17 @@ export class AccountSystem {
 		const folderMeta = await this._getFolderMetadataByLocation(location, markCacheDirty)
 
 		if (folderMeta.files.length) {
-			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
+			throw new AccountSystemNotEmptyError("folder", bytesToB64URL(location), "remove")
 		}
 
 		const childFolders = await this._getFoldersInFolderByLocation(location, markCacheDirty)
-
-		if (childFolders.length) {
-			throw new AccountSystemNotEmptyError("folder", bytesToB64(location), "remove")
-		}
+		await Promise.all(childFolders.map((folder) => this._removeFolderByLocation(folder.location)))
 
 		await this.config.metadataAccess.delete(this.getFolderDerivePath(location))
 
 		await this.config.metadataAccess.change<FoldersIndex>(
 			this.indexes.folders,
-			`Remove folder ${bytesToB64(location)}`,
+			`Remove folder ${bytesToB64URL(location)}`,
 			(doc) => {
 				const folderIndex = doc.folders.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
@@ -1007,7 +1348,7 @@ export class AccountSystem {
 	//////////// Share ////////////
 	///////////////////////////////
 
-	getShareHandle (meta: ShareMetadata): Uint8Array {
+	getShareHandle (meta: ShareMetadata | ShareIndexEntry): Uint8Array {
 		return new Uint8Array(Array.from(meta.locationKey).concat(Array.from(meta.encryptionKey)))
 	}
 
@@ -1030,8 +1371,24 @@ export class AccountSystem {
 			shared: sharedIndex.shared.map((shareEntry) => ({
 				locationKey: unfreezeUint8Array(shareEntry.locationKey),
 				encryptionKey: unfreezeUint8Array(shareEntry.encryptionKey),
+				fileHandles: shareEntry.fileHandles.map((h) => unfreezeUint8Array(h)),
+				fileLocations: shareEntry.fileLocations.map((l) => unfreezeUint8Array(l)),
 			})),
 		}
+	}
+
+	async getSharesByHandle (handle: Uint8Array, markCacheDirty = false) {
+		// console.log("getSharesByHandle(", handle, ")")
+
+		return await this._m.runExclusive(() => this._getSharesByHandle(handle, markCacheDirty))
+	}
+
+	async _getSharesByHandle (handle: Uint8Array, markCacheDirty = false): Promise<ShareIndexEntry[]> {
+		// console.log("_getSharesByHandle(", handle, ")")
+
+		const shareIndex = await this._getShareIndex(markCacheDirty)
+
+		return shareIndex.shared.filter((share) => share.fileHandles.findIndex((h) => arraysEqual(handle, h)) != -1)
 	}
 
 	async share (filesInit: ShareFileMetadataInit[], markCacheDirty = false): Promise<ShareMetadata> {
@@ -1049,15 +1406,14 @@ export class AccountSystem {
 					const meta = await this._getFileMetadata(fileInit.location, markCacheDirty)
 
 					return {
-						handle: meta.handle,
 						modified: meta.modified,
 						uploaded: meta.uploaded,
 						name: meta.name,
 						path: fileInit.path,
 						size: meta.size,
 						type: meta.type,
-						finished: !!meta.finished,
-						public: !!meta.public,
+						private: meta.private,
+						public: meta.public,
 					}
 				},
 			),
@@ -1076,6 +1432,8 @@ export class AccountSystem {
 				doc.shared.push({
 					locationKey,
 					encryptionKey,
+					fileHandles: files.map((f) => f.private.handle!).filter(Boolean),
+					fileLocations: files.map((f) => f.public.location).filter(Boolean) as Uint8Array[],
 				})
 			},
 			markCacheDirty,
@@ -1088,35 +1446,32 @@ export class AccountSystem {
 				doc.locationKey = locationKey
 				doc.encryptionKey = encryptionKey
 				doc.dateShared = Date.now()
-				doc.files = files
+				doc.files = files.map((file) => ({
+					modified: file.modified,
+					name: file.name,
+					path: file.path,
+					private: {
+						handle: file.private.handle,
+					},
+					public: {
+						location: file.public.location,
+					},
+					size: file.size,
+					type: file.type,
+					uploaded: file.uploaded,
+				}))
 			},
 			encryptionKey,
 			markCacheDirty,
 		)
 
-		return {
-			locationKey: unfreezeUint8Array(shareMeta.locationKey),
-			encryptionKey: unfreezeUint8Array(shareMeta.encryptionKey),
-			dateShared: shareMeta.dateShared,
-			files: shareMeta.files.map((file) => ({
-				handle: unfreezeUint8Array(file.handle),
-				name: file.name,
-				path: file.path,
-				size: file.size,
-				uploaded: file.uploaded,
-				modified: file.modified,
-				type: file.type,
-				finished: !!file.finished,
-				public: !!file.public,
-			})),
-		}
+		return unfreezeShareMetadata(shareMeta)
 	}
 
-	async getShared (handle: Uint8Array, markCacheDirty = false): Promise<ShareMetadata> {
-		// console.log("getShared(", handle, ")")
+	async getShared (locationKey: Uint8Array, encryptionKey: Uint8Array, markCacheDirty = false): Promise<ShareMetadata> {
+		// console.log("getShared(", locationKey, encryptionKey, ")")
 
-		const locationKey = handle.slice(0, 32)
-		const encryptionKey = handle.slice(32)
+		const handle = arrayMerge(locationKey, encryptionKey)
 
 		const shareMeta = await this.config.metadataAccess.getPublic<ShareMetadata>(
 			locationKey,
@@ -1125,24 +1480,9 @@ export class AccountSystem {
 		)
 
 		if (!shareMeta) {
-			throw new AccountSystemNotFoundError("shared", bytesToB64(handle))
+			throw new AccountSystemNotFoundError("shared", bytesToB64URL(handle))
 		}
 
-		return {
-			locationKey: unfreezeUint8Array(shareMeta.locationKey),
-			encryptionKey: unfreezeUint8Array(shareMeta.encryptionKey),
-			dateShared: shareMeta.dateShared,
-			files: shareMeta.files.map((file) => ({
-				handle: unfreezeUint8Array(file.handle),
-				name: file.name,
-				path: file.path,
-				size: file.size,
-				uploaded: file.uploaded,
-				modified: file.modified,
-				type: file.type,
-				finished: !!file.finished,
-				public: !!file.public,
-			})),
-		}
+		return unfreezeShareMetadata(shareMeta)
 	}
 }

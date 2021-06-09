@@ -1,9 +1,10 @@
 {
-	"name": "@opacity/util",
+	"name": "@opacity/transparent",
 	"version": "0.0.46",
 	"description": "> TODO: description",
 	"author": "Connor <13987924+CKH4@users.noreply.github.com>",
 	"homepage": "https://github.com/opacity/ts-client-library#readme",
+	"main": "src/index.ts",
 	"directories": {
 		"lib": "src"
 	},
@@ -18,18 +19,17 @@
 		"url": "https://github.com/opacity/ts-client-library/issues"
 	},
 	"scripts": {
+		"start": "rm -rf ./.cache && rm -rf ./dist && npx ts-node --project ./config/tsconfig.dev.json fuse.ts",
 		"pretty": "prettierx --ignore-path ./config/.prettierxignore --config ./config/.prettierx.config.json --write .",
 		"test": "echo \"Error: run tests from root\" && exit 1"
 	},
 	"dependencies": {
+		"@opacity/account-system": "^0.0.46",
+		"@opacity/filesystem-access": "^0.0.46",
 		"@opacity/middleware": "^0.0.46",
-		"async-mutex": "^0.2.6",
-		"bip39": "^3.0.3",
+		"@opacity/util": "^0.0.46",
+		"async-mutex": "^0.3.1",
 		"buffer": "^6.0.3",
-		"hdkey": "https://github.com/cryptocoinjs/hdkey#browserFriendly",
-		"js-base64": "^3.6.0",
-		"js-sha3": "^0.8.0",
-		"path-browserify": "^1.0.1",
 		"tslib": "^2.1.0",
 		"util": "^0.12.3",
 		"web-streams-polyfill": "^3.0.1"

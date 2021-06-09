@@ -34,6 +34,7 @@ export type NetworkMiddlewareFunction<T> = {
 }
 
 export interface NetworkMiddleware {
+	HEAD: NetworkMiddlewareFunction<undefined>
 	GET: NetworkMiddlewareFunction<undefined>
 	POST: NetworkMiddlewareFunction<string | FormData | undefined>
 }

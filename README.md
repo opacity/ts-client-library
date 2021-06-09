@@ -95,7 +95,7 @@ const fsObject = new FileSystemObject(filesIndex.files[0].handle, {
 	storageNode,
 })
 
-bindDeleteToAccountSystem(accountSystem, fsObject)
+bindFileSystemObjectToAccountSystem(accountSystem, fsObject)
 
 await fsObject.delete()
 

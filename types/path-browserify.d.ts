@@ -2,7 +2,6 @@ declare module "path-browserify" {
 	import path, {
 		FormatInputPathObject,
 		ParsedPath,
-		PlatformPath,
 		basename,
 		delimiter,
 		dirname,
@@ -16,14 +15,11 @@ declare module "path-browserify" {
 		relative,
 		resolve,
 		sep,
-		toNamespacedPath,
-		win32,
 	} from "path"
 	export default path
 	export {
 		FormatInputPathObject,
 		ParsedPath,
-		PlatformPath,
 		basename,
 		delimiter,
 		dirname,
@@ -37,7 +33,5 @@ declare module "path-browserify" {
 		relative,
 		resolve,
 		sep,
-		toNamespacedPath,
-		win32,
 	}
 }

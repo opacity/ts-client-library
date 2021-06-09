@@ -1,6 +1,6 @@
 {
 	"name": "@opacity/account-system",
-	"version": "0.0.38",
+	"version": "0.0.46",
 	"description": "> TODO: description",
 	"author": "Connor <13987924+CKH4@users.noreply.github.com>",
 	"homepage": "https://github.com/opacity/ts-client-library#readme",
@@ -24,8 +24,8 @@
 		"test": "echo \"Error: run tests from root\" && exit 1"
 	},
 	"dependencies": {
-		"@opacity/middleware": "^0.0.38",
-		"@opacity/util": "^0.0.38",
+		"@opacity/middleware": "^0.0.46",
+		"@opacity/util": "^0.0.46",
 		"async-mutex": "^0.2.6",
 		"automerge": "git+https://github.com/automerge/automerge.git#performance",
 		"buffer": "^6.0.3",
