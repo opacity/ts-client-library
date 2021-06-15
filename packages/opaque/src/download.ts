@@ -34,6 +34,7 @@ import { FileMetadata } from "@opacity/account-system/src"
 
 export type OpaqueDownloadConfig = {
 	storageNode: string
+	storageNodeV1: string
 
 	crypto: CryptoMiddleware
 	net: NetworkMiddleware
@@ -242,6 +243,36 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		})
 	}
 
+	async getDownloadUrlOldNode (): Promise<string | undefined> {
+		return this._m.runExclusive(async () => {
+			if (this._downloadUrl) {
+				return this._downloadUrl
+			}
+
+			const d = this
+
+			const downloadUrlRes = await d.config.net
+				.POST(
+					d.config.storageNodeV1 + "/api/v1/download",
+					undefined,
+					JSON.stringify({ fileID: bytesToHex(await d.getLocation()) }),
+					async (b) => JSON.parse(new TextDecoder("utf8").decode(await new Response(b).arrayBuffer())).fileDownloadUrl,
+				)
+				.catch(d._reject)
+
+			if (!downloadUrlRes) {
+				return
+			}
+
+			const downloadUrl = downloadUrlRes.data + '/file'
+
+			this._downloadUrl = downloadUrl
+
+			return downloadUrl
+		})
+	}
+
+
 	async getMetadata (): Promise<FileMeta | undefined> {
 		return this._m.runExclusive(async () => {
 			if (this._fileMeta) {
@@ -314,10 +345,13 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 			await this._beforeDownload(d)
 		}
 
-		const downloadUrl = await d.getDownloadUrl().catch(d._reject)
+		let downloadUrl = await d.getDownloadUrl().catch(d._reject)
 		console.log(downloadUrl, '----')
 		if (!downloadUrl) {
-			return
+			downloadUrl = await d.getDownloadUrlOldNode().catch(d._reject)
+			if(!downloadUrl) {
+				return
+			}
 		}
 
 		const metadata = await d.getMetadata().catch(d._reject)
