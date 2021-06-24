@@ -69,7 +69,7 @@ export const bindFileSystemObjectToAccountSystem = <T extends IFileSystemObject>
 }
 
 export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (accountSystem: AccountSystem, s: T) => {
-	s._afterPublicShare = async (s, fileLocation, share, shortlink) => {
+	s._afterPublicShare = async (s, fileLocation, handle, share, shortlink) => {
 		if (!shortlink) {
 			throw new Error("public share error: cannot find shortlink")
 		}
@@ -78,12 +78,13 @@ export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (acco
 			throw new Error("public share error: no valid file location")
 		}
 
-		const metaLocation = await accountSystem.getFileMetadataLocationByFileLocation(fileLocation)
+		const metaLocation = await accountSystem.getFileMetadataLocationByFileHandle(handle)
+		// const metaLocation = await accountSystem.getFileMetadataLocationByFileLocation(fileLocation)
 
 		await accountSystem.addFilePublicShortlink(metaLocation, shortlink)
 	}
 
-	s._afterPublicShareRevoke = async (s, fileLocation, shortlink) => {
+	s._afterPublicShareRevoke = async (s, fileLocation, handle, shortlink) => {
 		if (!shortlink) {
 			throw new Error("public share error: cannot find shortlink")
 		}
@@ -92,8 +93,9 @@ export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (acco
 			throw new Error("public share error: no valid file location")
 		}
 
-		const metaLocation = await accountSystem.getFileMetadataLocationByFileLocation(fileLocation)
+		// const metaLocation = await accountSystem.getFileMetadataLocationByFileHandle(handle)
+		// const metaLocation = await accountSystem.getFileMetadataLocationByFileLocation(fileLocation)
 
-		await accountSystem.removeFilePublicShortlink(metaLocation, shortlink)
+		await accountSystem.removeFilePublicShortlink(handle, shortlink)
 	}
 }
