@@ -45,7 +45,6 @@ export class FileSystemObjectMissingDataError extends Error {
 
 type PrivateToPublicObj = {
 	fileHandle: string
-	size: number
 }
 
 type PrivateToPublicResp = {
@@ -286,7 +285,6 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 			crypto: this.config.crypto,
 			payload: {
 				fileHandle: bytesToHex(this._handle),
-				size: await this.size(),
 			},
 		})
 
