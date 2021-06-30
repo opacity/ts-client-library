@@ -346,7 +346,6 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		}
 
 		let downloadUrl = await d.getDownloadUrl().catch(d._reject)
-		console.log(downloadUrl, '----')
 		if (!downloadUrl) {
 			downloadUrl = await d.getDownloadUrlOldNode().catch(d._reject)
 			if(!downloadUrl) {

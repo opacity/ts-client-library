@@ -19,6 +19,7 @@ export interface IFileSystemObject {
 	_beforeDelete?: (o: IFileSystemObject) => Promise<void>
 	_afterDelete?: (o: IFileSystemObject) => Promise<void>
 	delete(): Promise<void>
+	deleteMultiFile(files: []): Promise<void>
 
 	_beforeConvertToPublic?: (o: IFileSystemObject) => Promise<void>
 	_afterConvertToPublic?: (o: IFileSystemObject, res: PrivateToPublicResp) => Promise<void>
@@ -246,6 +247,27 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 			delete this._location
 		}
 	}
+
+	async deleteMultiFile (files: []) {
+		const fileIDs = files.map(item => bytesToHex(item.location.slice(0, 32)))
+
+		const payload = await getPayload({
+			crypto: this.config.crypto,
+			payload: { fileIDs },
+		})
+
+		const res = await this.config.net.POST(
+			this.config.storageNode + "/api/v2/delete",
+			undefined,
+			JSON.stringify(payload),
+			(b) => new Response(b).text(),
+		)
+
+		if (res.status != 200) {
+			throw new FileSystemObjectDeletionError('file ids', res.data)
+		}
+	}
+
 
 	async size (): Promise<number> {
 		const dl = await this._getDownloadURL()
