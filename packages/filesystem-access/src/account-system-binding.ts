@@ -58,14 +58,14 @@ export const bindFileSystemObjectToAccountSystem = <T extends IFileSystemObject>
 		await accountSystem.setFilePublicLocation(metadataLocation, o.handle.slice(0, 32))
 	}
 
-	o._afterConvertToPublic = async (o) => {
-		if (!o.handle) {
-			throw new Error("filesystem object error: handle not found")
-		}
+	// o._afterConvertToPublic = async (o) => {
+	// 	if (!o.handle) {
+	// 		throw new Error("filesystem object error: handle not found")
+	// 	}
 
-		const metadataLocation = await accountSystem.getFileMetadataLocationByFileHandle(o.handle)
-		await accountSystem.setFilePrivateHandle(metadataLocation, null)
-	}
+	// 	const metadataLocation = await accountSystem.getFileMetadataLocationByFileHandle(o.handle)
+	// 	await accountSystem.setFilePrivateHandle(metadataLocation, null)
+	// }
 }
 
 export const bindPublicShareToAccountSystem = <T extends IFileSystemShare> (accountSystem: AccountSystem, s: T) => {
