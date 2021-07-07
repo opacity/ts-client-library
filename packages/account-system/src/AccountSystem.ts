@@ -473,7 +473,7 @@ export class AccountSystem {
 					location: metaLocation,
 					finished: false,
 					private: {
-						handle: pub ? null : fileHandle,
+						handle: fileHandle,
 					},
 					public: {
 						location: pub ? fileLocation : null,
@@ -499,7 +499,7 @@ export class AccountSystem {
 				doc.uploaded = Date.now()
 				doc.finished = false
 				doc.private = {
-					handle: pub ? null : fileHandle,
+					handle: fileHandle,
 				}
 				doc.public = {
 					location: pub ? fileLocation : null,
