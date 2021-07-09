@@ -43,7 +43,8 @@ type PublicShareArgs = {
 	title: string
 	description: string
 	mimeType: string
-	fileExtension: string
+	fileExtension: string,
+	size: string,
 }
 
 type CreateShortlinkObj = {
