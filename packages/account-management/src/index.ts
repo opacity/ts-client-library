@@ -59,6 +59,8 @@ export type AccountUpgradePayload = {
 }
 
 export type AccountUpgradeStatusPayload = {
+	storageLimit: number
+	durationInMonths: number
 	metadataKeys: string[]
 	fileHandles: string[]
 }
@@ -158,6 +160,8 @@ export type AccountRenewStatusArgs = {
 }
 
 export type AccountUpgradeStatusArgs = {
+	size: number
+	duration?: number
 	metadataKeys: Uint8Array[]
 	fileIDs: Uint8Array[]
 }
@@ -342,7 +346,7 @@ export class Account {
 			},
 		})
 		const res = await this.config.net.POST<AccountRenewStatusRes>(
-			this.config.storageNode + "/api/v2/renew",
+			this.config.storageNode + "/api/v1/renew",
 			undefined,
 			JSON.stringify(payload),
 			(body) => new Response(body).json(),
@@ -371,7 +375,7 @@ export class Account {
 			},
 		})
 		const res = await this.config.net.POST<AccountRenewRes>(
-			this.config.storageNode + "/api/v2/renew/invoice",
+			this.config.storageNode + "/api/v1/renew/invoice",
 			undefined,
 			JSON.stringify(payload),
 			(body) => new Response(body).json(),
@@ -409,16 +413,18 @@ export class Account {
 		await done
 	}
 
-	async upgradeStatus ({ fileIDs, metadataKeys }: AccountUpgradeStatusArgs): Promise<AccountUpgradeStatus> {
+	async upgradeStatus ({ size, duration = 12, fileIDs, metadataKeys }: AccountUpgradeStatusArgs): Promise<AccountUpgradeStatus> {
 		const payload = await getPayload<AccountUpgradeStatusPayload>({
 			crypto: this.config.crypto,
 			payload: {
 				fileHandles: fileIDs.map((id) => bytesToHex(id)),
 				metadataKeys: metadataKeys.map((key) => bytesToB64URL(key)),
+				storageLimit: size,
+				durationInMonths: duration,
 			},
 		})
 		const res = await this.config.net.POST<AccountUpgradeStatusRes>(
-			this.config.storageNode + "/api/v2/upgrade",
+			this.config.storageNode + "/api/v1/upgrade",
 			undefined,
 			JSON.stringify(payload),
 			(body) => new Response(body).json(),
@@ -448,7 +454,7 @@ export class Account {
 			},
 		})
 		const res = await this.config.net.POST<AccountUpgradeRes>(
-			this.config.storageNode + "/api/v2/upgrade/invoice",
+			this.config.storageNode + "/api/v1/upgrade/invoice",
 			undefined,
 			JSON.stringify(payload),
 			(body) => new Response(body).json(),
