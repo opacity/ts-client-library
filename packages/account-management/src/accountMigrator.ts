@@ -108,8 +108,7 @@ export class AccountMigrator extends EventTarget {
 		this.setDetails("")
 		this.setStatus("Collecting all files.")
 		const allFiles = allFolders.map((folder) => folder[1].files.map((file) => [folder[0], file] as [string, FileEntryMeta])).flat()
-		// console.log(allFiles)
-
+		// console.log(allFiles, 'allFiles')
 		this.setStatus("Migrating folders.")
 
 		try {
@@ -210,7 +209,7 @@ export class AccountMigrator extends EventTarget {
 								},
 							})
 
-							const m = (await fso.exists()) ? await fso.metadata() : undefined
+							const m = (await fso.exists()) ? (await this.mh.downloadFile(version.handle).downloadMetadata()) : undefined
 
 							const fileMetadataV2 = await this.accountSystem.addUpload(
 								fileLocation,
@@ -218,7 +217,7 @@ export class AccountMigrator extends EventTarget {
 								path,
 								fileMetadata.name,
 								{
-									lastModified: m?.lastModified || version.modified || fileMetadata.modified || Date.now(),
+									lastModified: version.modified || fileMetadata.modified || Date.now(),
 									size: m?.size || version.size,
 									type: m?.type || "",
 								},
