@@ -278,7 +278,7 @@ export class TransparentDownload extends EventTarget
 			return
 		}
 
-		const downloadUrl = downloadUrlRes.data
+		const downloadUrl = downloadUrlRes.data + '/file'
 
 		this._downloadUrl = downloadUrl
 

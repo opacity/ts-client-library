@@ -169,7 +169,8 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		}
 
 		if (this._handle) {
-			return serializeEncrypted<FileMeta>(this.config.crypto, res.data, this._handle.slice(32, 64))
+			const serialized = await serializeEncrypted<FileMeta>(this.config.crypto, res.data, this._handle.slice(32, 64))
+			return serialized
 		}
 
 		return JSON.parse(new TextDecoder().decode(res.data)) as FileMeta
