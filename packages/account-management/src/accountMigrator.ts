@@ -3,6 +3,7 @@ import { posix } from "path-browserify"
 import { MigratorPercentEvent, MigratorStatusEvent, MigratorDetailsEvent, MigratorWarningEvent, MigratorErrorEvent } from "./migrateEvents"
 
 import { MasterHandle } from "../../../../opaque/src/account"
+import { cleanPath } from "../../../../opaque/src/utils/cleanPath"
 import { FolderMeta } from "../../../../opaque/src/core/account/folder-meta"
 import { FileEntryMeta } from "../../../../opaque/src/core/account/file-entry"
 
@@ -92,7 +93,7 @@ export class AccountMigrator extends EventTarget {
 		try {
 			const rootFolderV1 = await this.mh.getFolderMeta("/")
 			// console.log(rootFolderV1)
-			this.setPercent(5)
+			this.setPercent(2)
 		} catch (err) {
 			this.dispatchEvent(new MigratorErrorEvent({ error: "Account was already migrated, or has never been initialized." }))
 
@@ -102,7 +103,7 @@ export class AccountMigrator extends EventTarget {
 		this.setDetails("")
 		this.setStatus("Collecting all folders.")
 		const allFolders = await this.collectFolderRecursively("/")
-		this.setPercent(10)
+		this.setPercent(3)
 		// console.log(allFolders)
 
 		this.setDetails("")
@@ -114,7 +115,7 @@ export class AccountMigrator extends EventTarget {
 		try {
 			this.setDetails("Initializing v2 root folder.")
 			const rootFolderV2 = await this.accountSystem.addFolder("/")
-			this.setPercent(15)
+			this.setPercent(5)
 			// console.log(rootFolderV2)
 		} catch (err) {
 			if (err) {
@@ -130,48 +131,48 @@ export class AccountMigrator extends EventTarget {
 			try {
 				await this.accountSystem.addFolder(path)
 				++folderCnt
-				this.setPercent((15 / folderCount * folderCnt + 15).toFixed(0))
+				this.setPercent((25 / folderCount * folderCnt + 5).toFixed(0))
 			} catch (err) {
 				this.dispatchEvent(new MigratorErrorEvent({ error: `Recieved unknown error while adding folder ("${path}") v2 metadata: ${err}.` }))
 			}
 		}
 
 		this.setDetails("")
-		this.setStatus("Counting file sizes.")
-		try {
-			const acctInfo = await this.mh.getAccountInfo() as AccountGetData
-			const accountedStorageUsed = Math.round(acctInfo.storageUsed * 1000 * 1000 * 1000)
-			let totalFileSize = 0
-			const fileCount = allFiles.length
-			let fileCountingCnt = 0
-			for (let [_, fileMetadata] of allFiles) {
-				for (let version of fileMetadata.versions) {
-					const versionID = version.handle.slice(0, 4) + "..."
-					this.setDetails(`Getting file ${versionID} size. Total size counted: ${totalFileSize} bytes.`)
+		// this.setStatus("Counting file sizes.")
+		// try {
+		// 	const acctInfo = await this.mh.getAccountInfo() as AccountGetData
+		// 	const accountedStorageUsed = Math.round(acctInfo.storageUsed * 1000 * 1000 * 1000)
+		// 	let totalFileSize = 0
+		// 	const fileCount = allFiles.length
+		// 	let fileCountingCnt = 0
+		// 	for (let [_, fileMetadata] of allFiles) {
+		// 		for (let version of fileMetadata.versions) {
+		// 			const versionID = version.handle.slice(0, 4) + "..."
+		// 			this.setDetails(`Getting file ${versionID} size. Total size counted: ${totalFileSize} bytes.`)
 
-					const downloadUrl = (await (await fetch(
-						this.config.storageNodeV1 + "/api/v1/download", {
-						method: "POST",
-						body: JSON.stringify({ fileID: version.handle.slice(0, 64) })
-					}
-					)).json()).fileDownloadUrl
+		// 			const downloadUrl = (await (await fetch(
+		// 				this.config.storageNodeV1 + "/api/v1/download", {
+		// 				method: "POST",
+		// 				body: JSON.stringify({ fileID: version.handle.slice(0, 64) })
+		// 			}
+		// 			)).json()).fileDownloadUrl
 
-					const fileSize = +(await fetch(downloadUrl + "/file", { method: "HEAD" })).headers.get("content-length")!
-					// file meta size isn't counted
-					// const metaSize = +(await fetch(downloadUrl + "/metadata", { method: "HEAD" })).headers.get("content-length")!
+		// 			const fileSize = +(await fetch(downloadUrl + "/file", { method: "HEAD" })).headers.get("content-length")!
+		// 			// file meta size isn't counted
+		// 			// const metaSize = +(await fetch(downloadUrl + "/metadata", { method: "HEAD" })).headers.get("content-length")!
 
-					totalFileSize += fileSize // + metaSize
-				}
-				++fileCountingCnt
-				this.setPercent((35 / fileCount * fileCountingCnt + 30).toFixed(0))
-			}
+		// 			totalFileSize += fileSize // + metaSize
+		// 		}
+		// 		++fileCountingCnt
+		// 		this.setPercent((35 / fileCount * fileCountingCnt + 20).toFixed(0))
+		// 	}
 
-			if (accountedStorageUsed != totalFileSize) {
-				this.dispatchEvent(new MigratorWarningEvent({ warning: `This account appears to be partially corrupted, because the accounted storage used (${accountedStorageUsed} bytes) does not match the measured file size (${totalFileSize} bytes). The v2 metadata may not be complete. Please look for any inconsistencies.` }))
-			}
-		} catch (err) {
-			this.dispatchEvent(new MigratorErrorEvent({ error: `Recieved unknown error while calculating storage used: ${err}.` }))
-		}
+		// 	if (accountedStorageUsed != totalFileSize) {
+		// 		this.dispatchEvent(new MigratorWarningEvent({ warning: `This account appears to be partially corrupted, because the accounted storage used (${accountedStorageUsed} bytes) does not match the measured file size (${totalFileSize} bytes). The v2 metadata may not be complete. Please look for any inconsistencies.` }))
+		// 	}
+		// } catch (err) {
+		// 	this.dispatchEvent(new MigratorErrorEvent({ error: `Recieved unknown error while calculating storage used: ${err}.` }))
+		// }
 
 		this.setStatus("Migrating files.")
 
@@ -234,7 +235,7 @@ export class AccountMigrator extends EventTarget {
 				}
 			}
 			++fileMigratingCnt
-			this.setPercent((35 / fileCount * fileMigratingCnt + 55).toFixed(0))
+			this.setPercent((65 / fileCount * fileMigratingCnt + 30).toFixed(0))
 		}
 
 		this.setPercent(99)
@@ -247,6 +248,7 @@ export class AccountMigrator extends EventTarget {
 
 	private async collectFolderRecursively(path: string, out: [string, FolderMeta][] = []) {
 		let output = out.slice()
+		path = cleanPath(path)
 
 		this.setDetails(`Getting v1 folder "${path}".`)
 
