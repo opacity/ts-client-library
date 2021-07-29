@@ -3,7 +3,6 @@ import { posix } from "path-browserify"
 import { MigratorPercentEvent, MigratorStatusEvent, MigratorDetailsEvent, MigratorWarningEvent, MigratorErrorEvent } from "./migrateEvents"
 
 import { MasterHandle } from "../../../../opaque/src/account"
-import { cleanPath } from "../../../../opaque/src/utils/cleanPath"
 import { FolderMeta } from "../../../../opaque/src/core/account/folder-meta"
 import { FileEntryMeta } from "../../../../opaque/src/core/account/file-entry"
 
@@ -13,6 +12,7 @@ import { FileSystemObject } from "../../filesystem-access/src/filesystem-object"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
 import { WebAccountMiddleware, WebNetworkMiddleware } from "../../middleware-web"
 import { bytesToHex, hexToBytes } from "@opacity/util/src/hex"
+import { cleanPath } from "@opacity/util/src/path"
 
 export type AccountMigratorConfig = {
 	storageNodeV1: string
@@ -54,6 +54,7 @@ export class AccountMigrator extends EventTarget {
 		this.mh = new MasterHandle({ handle: bytesToHex(handle) }, {
 			downloadOpts: {
 				endpoint: config.storageNodeV1,
+				autoStart: false,
 			},
 			uploadOpts: {
 				endpoint: config.storageNodeV1,
@@ -262,7 +263,8 @@ export class AccountMigrator extends EventTarget {
 				output = output.concat(await this.collectFolderRecursively(subPath))
 			}
 		} catch (err) {
-			this.dispatchEvent(new MigratorErrorEvent({ error: `Recieved unknown error while collecting folder ("${path}") v1 metadata: ${err}.` }))
+			return output
+			// this.dispatchEvent(new MigratorErrorEvent({ error: `Recieved unknown error while collecting folder ("${path}") v1 metadata: ${err}.` }))
 		} finally {
 			return output
 		}
