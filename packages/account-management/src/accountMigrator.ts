@@ -104,7 +104,7 @@ export class AccountMigrator extends EventTarget {
 		this.setDetails("")
 		this.setStatus("Collecting all folders.")
 		const allFolders = await this.collectFolderRecursively("/")
-		this.setPercent(3)
+		this.setPercent(15)
 		// console.log(allFolders)
 
 		this.setDetails("")
@@ -116,7 +116,7 @@ export class AccountMigrator extends EventTarget {
 		try {
 			this.setDetails("Initializing v2 root folder.")
 			const rootFolderV2 = await this.accountSystem.addFolder("/")
-			this.setPercent(5)
+			this.setPercent(30)
 			// console.log(rootFolderV2)
 		} catch (err) {
 			if (err) {
@@ -124,19 +124,19 @@ export class AccountMigrator extends EventTarget {
 			}
 		}
 
-		const folderCount = allFolders.length
-		let folderCnt = 0
-		for (let [path, folderMeta] of allFolders) {
-			this.setDetails(`Initializing v2 folder "${path}".`)
+		// const folderCount = allFolders.length
+		// let folderCnt = 0
+		// for (let [path, folderMeta] of allFolders) {
+		// 	this.setDetails(`Initializing v2 folder "${path}".`)
 
-			try {
-				await this.accountSystem.addFolder(path)
-				++folderCnt
-				this.setPercent((25 / folderCount * folderCnt + 5).toFixed(0))
-			} catch (err) {
-				this.dispatchEvent(new MigratorErrorEvent({ error: `Recieved unknown error while adding folder ("${path}") v2 metadata: ${err}.` }))
-			}
-		}
+		// 	try {
+		// 		await this.accountSystem.addFolder(path)
+		// 		++folderCnt
+		// 		this.setPercent((25 / folderCount * folderCnt + 5).toFixed(0))
+		// 	} catch (err) {
+		// 		this.dispatchEvent(new MigratorErrorEvent({ error: `Recieved unknown error while adding folder ("${path}") v2 metadata: ${err}.` }))
+		// 	}
+		// }
 
 		this.setDetails("")
 		// this.setStatus("Counting file sizes.")
@@ -188,13 +188,16 @@ export class AccountMigrator extends EventTarget {
 				try {
 					try {
 						const fileMetadataV2Location = await this.accountSystem.getFileMetadataLocationByFileHandle(hexToBytes(version.handle))
-						const fileMetadata = await this.accountSystem.getFileMetadata(fileMetadataV2Location)
 
-						if (!fileMetadata.finished) {
-							await this.accountSystem.finishUpload(fileMetadataV2Location)
+						if (fileMetadataV2Location) {
+							const fileMetadata = await this.accountSystem.getFileMetadata(fileMetadataV2Location)
+
+							if (!fileMetadata.finished) {
+								await this.accountSystem.finishUpload(fileMetadataV2Location)
+							}
+
+							this.dispatchEvent(new MigratorWarningEvent({ warning: `File handle (${versionID}) already exists in v2 metadata. Keeping existing metadata.` }))
 						}
-
-						this.dispatchEvent(new MigratorWarningEvent({ warning: `File handle (${versionID}) already exists in v2 metadata. Keeping existing metadata.` }))
 					} catch (err) {
 						if (err instanceof AccountSystemNotFoundError) {
 							const fileHandle = hexToBytes(version.handle)
@@ -211,7 +214,7 @@ export class AccountMigrator extends EventTarget {
 								},
 							})
 
-							const m = (await fso.exists()) ? (await this.mh.downloadFile(version.handle).downloadMetadata()) : undefined
+							const m = await this.mh.downloadFile(version.handle).downloadMetadata()
 
 							const fileMetadataV2 = await this.accountSystem.addUpload(
 								fileLocation,
@@ -260,10 +263,14 @@ export class AccountMigrator extends EventTarget {
 
 			for (let f of fm.folders) {
 				const subPath = posix.join(path, f.name)
-				output = output.concat(await this.collectFolderRecursively(subPath))
+				const subOutPut = await this.collectFolderRecursively(subPath)
+
+				if (subOutPut.length > 0) {
+					output = output.concat(subOutPut)
+				}
 			}
 		} catch (err) {
-			return output
+			return []
 			// this.dispatchEvent(new MigratorErrorEvent({ error: `Recieved unknown error while collecting folder ("${path}") v1 metadata: ${err}.` }))
 		} finally {
 			return output
