@@ -34,7 +34,6 @@ import { FileMetadata } from "@opacity/account-system/src"
 
 export type OpaqueDownloadConfig = {
 	storageNode: string
-	storageNodeV1: string
 
 	crypto: CryptoMiddleware
 	net: NetworkMiddleware
