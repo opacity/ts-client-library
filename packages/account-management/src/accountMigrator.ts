@@ -15,8 +15,7 @@ import { bytesToHex, hexToBytes } from "@opacity/util/src/hex"
 import { cleanPath } from "@opacity/util/src/path"
 
 export type AccountMigratorConfig = {
-	storageNodeV1: string
-	storageNodeV2: string
+	storageNode: string
 }
 
 export class AccountMigrator extends EventTarget {
@@ -53,11 +52,11 @@ export class AccountMigrator extends EventTarget {
 		// v1
 		this.mh = new MasterHandle({ handle: bytesToHex(handle) }, {
 			downloadOpts: {
-				endpoint: config.storageNodeV1,
+				endpoint: config.storageNode,
 				autoStart: false,
 			},
 			uploadOpts: {
-				endpoint: config.storageNodeV1,
+				endpoint: config.storageNode,
 			}
 		})
 
@@ -69,12 +68,12 @@ export class AccountMigrator extends EventTarget {
 		this.metadataAccess = new MetadataAccess({
 			crypto: this.cryptoMiddleware,
 			net: this.netMiddleware,
-			metadataNode: config.storageNodeV2,
+			metadataNode: config.storageNode,
 		})
 		this.account = new Account({
 			crypto: this.cryptoMiddleware,
 			net: this.netMiddleware,
-			storageNode: this.config.storageNodeV2,
+			storageNode: this.config.storageNode,
 		})
 		this.accountSystem = new AccountSystem({
 			metadataAccess: this.metadataAccess
@@ -152,7 +151,7 @@ export class AccountMigrator extends EventTarget {
 		// 			this.setDetails(`Getting file ${versionID} size. Total size counted: ${totalFileSize} bytes.`)
 
 		// 			const downloadUrl = (await (await fetch(
-		// 				this.config.storageNodeV1 + "/api/v1/download", {
+		// 				this.config.storageNode + "/api/v1/download", {
 		// 				method: "POST",
 		// 				body: JSON.stringify({ fileID: version.handle.slice(0, 64) })
 		// 			}
@@ -210,7 +209,7 @@ export class AccountMigrator extends EventTarget {
 								config: {
 									crypto: this.cryptoMiddleware,
 									net: this.netMiddleware,
-									storageNode: this.config.storageNodeV2,
+									storageNode: this.config.storageNode,
 								},
 							})
 
