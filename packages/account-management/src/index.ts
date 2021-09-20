@@ -360,13 +360,6 @@ export class Account {
 	}
 
 	async renewAccount ({ duration = 12 }: AccountRenewArgs): Promise<AccountRenewInvoice> {
-		try {
-			const info = await this.info()
-
-			if (info.invoice) {
-				return info.invoice
-			}
-		} catch {}
 
 		const payload = await getPayload<AccountRenewPayload>({
 			crypto: this.config.crypto,
@@ -438,14 +431,6 @@ export class Account {
 	}
 
 	async upgradeAccount ({ size, duration = 12 }: AccountUpgradeArgs): Promise<AccountUpgradeInvoice> {
-		try {
-			const info = await this.info()
-
-			if (info.invoice) {
-				return info.invoice
-			}
-		} catch {}
-
 		const payload = await getPayload<AccountUpgradePayload>({
 			crypto: this.config.crypto,
 			payload: {
