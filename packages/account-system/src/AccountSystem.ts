@@ -718,7 +718,7 @@ export class AccountSystem {
 			},
 			markCacheDirty,
 		)
-		
+
 		// console.log('revoke unfreeze', unfreezeFileMetadata(fileMetaDoc))
 		return unfreezeFileMetadata(fileMetaDoc)
 	}
@@ -870,6 +870,47 @@ export class AccountSystem {
 				const fileIndex = doc.files.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
 				doc.files.splice(fileIndex, 1)
+			},
+			markCacheDirty,
+		)
+	}
+
+	async removeMultiFile(locations: Uint8Array[], markCacheDirty = false) {
+
+		return await this._m.runExclusive(() => this._removeMultiFile(locations, markCacheDirty))
+	}
+
+	async _removeMultiFile(locations: Uint8Array[], markCacheDirty = false) {
+
+		await this.config.metadataAccess.change<FilesIndex>(
+			this.indexes.files,
+			"Mark upload multi deleted",
+			(doc) => {
+				locations.forEach(location => {
+					const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+
+					if (!fileEntry) {
+						throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
+					}
+
+					fileEntry.deleted = true
+				})
+			},
+			markCacheDirty,
+		)
+
+		const fileMeta = await this._getFileMetadata(locations[0], markCacheDirty)
+		await this.config.metadataAccess.multiDelete(locations.map(location => this.getFileDerivePath(location)))
+
+		await this.config.metadataAccess.change<FolderMetadata>(
+			this.getFolderDerivePath(fileMeta.folderDerive),
+			`Remove multi-file ${location}`,
+			(doc) => {
+				locations.forEach(location => {
+					const fileIndex = doc.files.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+
+					doc.files.splice(fileIndex, 1)
+				})
 			},
 			markCacheDirty,
 		)

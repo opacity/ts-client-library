@@ -250,7 +250,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 	}
 
 	async deleteMultiFile (files: []) {
-		const fileIDs = files.map(item => bytesToHex(item.location.slice(0, 32)))
+		const fileIDs = files.map(item => bytesToHex(item.private.handle.slice(0, 32)))
 
 		const payload = await getPayload({
 			crypto: this.config.crypto,

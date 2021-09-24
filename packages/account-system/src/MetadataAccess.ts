@@ -42,6 +42,10 @@ type MetadataDeletePayload = {
 	metadataV2Key: string
 }
 
+type MetadataMultiDeletePayload = {
+	metadataV2Keys: string[]
+}
+
 type MetadataDeleteRes = {
 	status: "metadataV2 successfully deleted"
 }
@@ -257,6 +261,38 @@ export class MetadataAccess {
 			undefined,
 			true,
 		)
+	}
+
+	async _multiMetadataIndexRemove (privs: Uint8Array[]) {
+		const metaIndexPriv = await this.config.crypto.derive(undefined, this.metadataIndexPath)
+		const doc = await this._get<MetadataIndex>(metaIndexPriv, undefined, false)
+		
+
+		privs.forEach(priv => {
+			const privString = bytesToB64URL(priv)
+
+			// fast check
+			if (doc && !(privString in doc.privs)) {
+				return
+			}
+		})
+		
+		// long set
+		// await this._change<MetadataIndex>(
+		// 	metaIndexPriv,
+		// 	undefined,
+		// 	(doc) => {
+		// 		if (privString in doc) {
+		// 			return
+		// 		}
+
+		// 		delete doc.privs[privString]
+		// 		delete doc.encryptKeys[privString]
+		// 	},
+		// 	false,
+		// 	undefined,
+		// 	true,
+		// )
 	}
 
 	async change<T = unknown> (
@@ -523,6 +559,21 @@ export class MetadataAccess {
 		await this._metadataIndexRemove(priv)
 	}
 
+	async multiDelete (paths: string[]): Promise<void> {
+		// console.log("multiDelete(", paths, ")")
+
+		let privs = []
+		for(let path of paths) {
+			path = cleanPath(path)
+
+			const priv = await this.config.crypto.derive(undefined, path)
+			privs.push(priv)
+		}
+		
+		await this._multiDelete(privs)
+		await this._multiMetadataIndexRemove(privs)
+	}
+
 	async deletePublic (priv: Uint8Array): Promise<void> {
 		// console.log("deletePublic(", priv, ")")
 
@@ -552,5 +603,36 @@ export class MetadataAccess {
 
 		delete this.dags[pubString]
 		delete this.cache[pubString]
+	}
+
+	async _multiDelete (privs: Array<Uint8Array>): Promise<void> {
+		// console.log("_multiDelete(", priv, ")")
+
+		let pubStrings = []
+
+		for(const priv of privs) {
+			const pub = await this.config.crypto.getPublicKey(priv)
+			const pubString = bytesToB64URL(pub)
+			pubStrings.push(pubString)
+		}
+
+		const payload = await getPayload<MetadataMultiDeletePayload>({
+			crypto: this.config.crypto,
+			payload: {
+				metadataV2Keys: pubStrings,
+			},
+		})
+
+		await this.config.net.POST<MetadataDeleteRes>(
+			this.config.metadataNode + "/api/v2/metadata/delete-multiple",
+			undefined,
+			JSON.stringify(payload),
+			(res) => new Response(res).json(),
+		)
+
+		pubStrings.forEach(pubString => {
+			delete this.dags[pubString]
+			delete this.cache[pubString]
+		});
 	}
 }
