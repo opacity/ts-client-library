@@ -45,7 +45,8 @@ export class FileSystemObjectMissingDataError extends Error {
 }
 
 type PrivateToPublicObj = {
-	fileHandle: string
+	fileHandle: string,
+	fileSize: Number,
 }
 
 type PrivateToPublicResp = {
@@ -63,6 +64,7 @@ export type FileSystemObjectConfig = {
 export type FileSystemObjectArgs = {
 	handle: Uint8Array | undefined
 	location: Uint8Array | undefined
+	fileSize?: Number
 
 	config: FileSystemObjectConfig
 }
@@ -70,12 +72,16 @@ export type FileSystemObjectArgs = {
 export class FileSystemObject extends EventTarget implements IFileSystemObject {
 	_handle?: Uint8Array
 	_location?: Uint8Array
+	_fileSize?: Number
 
 	get handle () {
 		return this._handle
 	}
 	get location () {
 		return this._location
+	}
+	get fileSize () {
+		return this._fileSize
 	}
 
 	get public () {
@@ -87,11 +93,12 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 
 	config: FileSystemObjectConfig
 
-	constructor ({ handle, location, config }: FileSystemObjectArgs) {
+	constructor ({ handle, location, fileSize, config }: FileSystemObjectArgs) {
 		super()
 
 		this._handle = handle
 		this._location = location
+		this._fileSize = fileSize
 
 		this.config = config
 	}
@@ -304,10 +311,12 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 			await this._beforeConvertToPublic(this)
 		}
 
+
 		const payload = await getPayload<PrivateToPublicObj>({
 			crypto: this.config.crypto,
 			payload: {
 				fileHandle: bytesToHex(this._handle),
+				fileSize: this._fileSize
 			},
 		})
 
