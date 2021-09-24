@@ -183,6 +183,11 @@ export type AccountUpdateAPIVersionRes = {
 
 export class Account {
 	config: AccountConfig
+	_waitingTimer
+
+	get waitingTimer () {
+		return this._waitingTimer
+	}
 
 	constructor (config: AccountConfig) {
 		this.config = config
@@ -328,11 +333,11 @@ export class Account {
 				if (iTime > 10) {
 					iTime = 10
 				}
-				setTimeout(iFn, iTime * 1000)
+				this._waitingTimer = setTimeout(iFn, iTime * 1000)
 			}
 		}
 
-		setTimeout(iFn, iTime)
+		this._waitingTimer = setTimeout(iFn, iTime)
 
 		await done
 	}
@@ -397,11 +402,11 @@ export class Account {
 				if (iTime > 10) {
 					iTime = 10
 				}
-				setTimeout(iFn, iTime * 1000)
+				this._waitingTimer = setTimeout(iFn, iTime * 1000)
 			}
 		}
 
-		setTimeout(iFn, iTime)
+		this._waitingTimer = setTimeout(iFn, iTime)
 
 		await done
 	}
@@ -468,12 +473,16 @@ export class Account {
 				if (iTime > 10) {
 					iTime = 10
 				}
-				setTimeout(iFn, iTime * 1000)
+				this._waitingTimer = setTimeout(iFn, iTime * 1000)
 			}
 		}
 
-		setTimeout(iFn, iTime)
+		this._waitingTimer = setTimeout(iFn, iTime)
 
 		await done
+	}
+
+	async cancelWaitForPayment () {
+		this._waitingTimer && clearTimeout(this._waitingTimer)
 	}
 }
