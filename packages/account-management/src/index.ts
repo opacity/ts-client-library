@@ -485,4 +485,19 @@ export class Account {
 	async cancelWaitForPayment () {
 		this._waitingTimer && clearTimeout(this._waitingTimer)
 	}
+
+	async getSmartContracts () {
+		const res = await this.config.net.GET(
+			this.config.storageNode + "/api/v2/smart-contracts",
+			undefined,
+			undefined,
+			(body) => new Response(body).json(),
+		)
+
+		if (!res.ok || !res.data.contracts) {
+			throw new Error("Error getting Smart Contracts")
+		}
+
+		return res.data.contracts
+	}
 }
