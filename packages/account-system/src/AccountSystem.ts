@@ -424,6 +424,7 @@ export class AccountSystem {
 	async addUpload(
 		// 32 bytes
 		fileLocation: Uint8Array,
+		folderDerive: Uint8Array,
 		// 32 bytes
 		fileEncryptionKey: Uint8Array | undefined,
 		path: string,
@@ -435,12 +436,13 @@ export class AccountSystem {
 		// console.log("addUpload(", fileLocation, fileEncryptionKey, path, filename, meta, pub, ")")
 
 		return await this._m.runExclusive(() =>
-			this._addUpload(fileLocation, fileEncryptionKey, path, filename, meta, pub, markCacheDirty),
+			this._addUpload(fileLocation, folderDerive, fileEncryptionKey, path, filename, meta, pub, markCacheDirty),
 		)
 	}
 
 	async _addUpload(
 		fileLocation: Uint8Array,
+		folderDerive: Uint8Array,
 		fileEncryptionKey: Uint8Array | undefined,
 		path: string,
 		filename: string,
@@ -448,43 +450,43 @@ export class AccountSystem {
 		pub: boolean,
 		markCacheDirty = false,
 	): Promise<FileMetadata> {
-		// console.log("_addUpload(", fileLocation, fileEncryptionKey, path, filename, meta, pub, ")")
+		// console.log("_addUpload(", fileLocation, folderDerive, fileEncryptionKey, path, filename, meta, pub, ")")
 
 		path = cleanPath(path)
 		validateDirectoryPath(path)
 		validateFilename(filename)
 
-		const folder = await this._addFolder(path, markCacheDirty)
-		const folderDerive = folder.location
+		// const folder = await this._addFolder(path, markCacheDirty)
+		// const folderDerive = folder.location
 
 		const metaLocation = await this.config.metadataAccess.config.crypto.getRandomValues(32)
 		const filePath = this.getFileDerivePath(metaLocation)
 
 		const fileHandle = fileEncryptionKey ? arrayMerge(fileLocation, fileEncryptionKey) : fileLocation
 
-		await this.config.metadataAccess.change<FilesIndex>(
-			this.indexes.files,
-			`Add file "${bytesToB64URL(metaLocation)}" to file index`,
-			(doc) => {
-				if (!doc.files) {
-					doc.files = []
-				}
-				doc.files.push({
-					location: metaLocation,
-					finished: false,
-					private: {
-						handle: fileHandle,
-					},
-					public: {
-						location: pub ? fileLocation : null,
-						shortLinks: []
-					},
-					deleted: false,
-					errored: false,
-				})
-			},
-			markCacheDirty,
-		)
+		// await this.config.metadataAccess.change<FilesIndex>(
+		// 	this.indexes.files,
+		// 	`Add file "${bytesToB64URL(metaLocation)}" to file index`,
+		// 	(doc) => {
+		// 		if (!doc.files) {
+		// 			doc.files = []
+		// 		}
+		// 		doc.files.push({
+		// 			location: metaLocation,
+		// 			finished: false,
+		// 			private: {
+		// 				handle: fileHandle,
+		// 			},
+		// 			public: {
+		// 				location: pub ? fileLocation : null,
+		// 				shortLinks: []
+		// 			},
+		// 			deleted: false,
+		// 			errored: false,
+		// 		})
+		// 	},
+		// 	markCacheDirty,
+		// )
 
 		const file = await this.config.metadataAccess.change<FileMetadata>(
 			filePath,
@@ -497,7 +499,7 @@ export class AccountSystem {
 				doc.size = meta.size
 				doc.type = meta.type
 				doc.uploaded = Date.now()
-				doc.finished = false
+				doc.finished = true
 				doc.private = {
 					handle: fileHandle,
 				}
@@ -512,34 +514,58 @@ export class AccountSystem {
 		return unfreezeFileMetadata(file)
 	}
 
-	async finishUpload(location: Uint8Array, markCacheDirty = false): Promise<void> {
+	async finishUpload(fileMeta: FileMetadata, markCacheDirty = false): Promise<void> {
 		// console.log("finishUpload(", location, ")")
 
-		return await this._m.runExclusive(() => this._finishUpload(location, markCacheDirty))
+		return await this._m.runExclusive(() => this._finishUpload(fileMeta, markCacheDirty))
 	}
 
-	async _finishUpload(location: Uint8Array, markCacheDirty = false): Promise<void> {
+	async _finishUpload(fileMeta: FileMetadata, markCacheDirty = false): Promise<void> {
 		// console.log("_finishUpload(", location, ")")
 
-		const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
-			this.getFileDerivePath(location),
-			"Mark upload finished",
+		// const fileMeta = await this.config.metadataAccess.change<FileMetadata>(
+		// 	this.getFileDerivePath(location),
+		// 	"Mark upload finished",
+		// 	(doc) => {
+		// 		doc.finished = true
+		// 	},
+		// 	markCacheDirty,
+		// )
+
+		await this.config.metadataAccess.change<FilesIndex>(
+			this.indexes.files,
+			`Add file "${fileMeta.location}" to file index`,
 			(doc) => {
-				doc.finished = true
+				if (!doc.files) {
+					doc.files = []
+				}
+				doc.files.push({
+					location: fileMeta.location,
+					finished: true,
+					private: {
+						handle: fileMeta.private.handle,
+					},
+					public: {
+						location: null,
+						shortLinks: []
+					},
+					deleted: false,
+					errored: false,
+				})
 			},
 			markCacheDirty,
-		)
+		);
 
 		await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
-			`Add file "${bytesToB64URL(location)}" to folder`,
+			`Add file "${fileMeta.location}" to folder`,
 			(doc) => {
 				if (!doc.files) {
 					doc.files = []
 				}
 				doc.files.push({
 					name: fileMeta.name,
-					location: location,
+					location: fileMeta.location,
 				})
 
 				doc.modified = Date.now()
@@ -548,23 +574,23 @@ export class AccountSystem {
 			markCacheDirty,
 		)
 
-		await this.config.metadataAccess.change<FilesIndex>(
-			this.indexes.files,
-			`Mark upload ${bytesToB64URL(location)} finished`,
-			(doc) => {
-				const fileEntry = doc.files.find((file) => arraysEqual(location, file.location))
+		// await this.config.metadataAccess.change<FilesIndex>(
+		// 	this.indexes.files,
+		// 	`Mark upload ${bytesToB64URL(fileMeta.location)} finished`,
+		// 	(doc) => {
+		// 		const fileEntry = doc.files.find((file) => arraysEqual(fileMeta.location, file.location))
 
-				if (!fileEntry) {
-					throw new AccountSystemNotFoundError(
-						"file entry",
-						`"${bytesToB64URL(location)}" in "${bytesToB64URL(unfreezeUint8Array(fileMeta.folderDerive))}"`,
-					)
-				}
+		// 		if (!fileEntry) {
+		// 			throw new AccountSystemNotFoundError(
+		// 				"file entry",
+		// 				`"${bytesToB64URL(fileMeta.location)}" in "${bytesToB64URL(unfreezeUint8Array(fileMeta.folderDerive))}"`,
+		// 			)
+		// 		}
 
-				fileEntry.finished = true
-			},
-			markCacheDirty,
-		)
+		// 		fileEntry.finished = true
+		// 	},
+		// 	markCacheDirty,
+		// )
 	}
 
 	async setFilePrivateHandle(
