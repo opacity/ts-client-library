@@ -208,30 +208,30 @@ export class MetadataAccess {
 		}
 
 		// long set
-		await this._change<MetadataIndex>(
-			metaIndexPriv,
-			undefined,
-			(doc) => {
-				if (privString in doc) {
-					return
-				}
+		// await this._change<MetadataIndex>(
+		// 	metaIndexPriv,
+		// 	undefined,
+		// 	(doc) => {
+		// 		if (privString in doc) {
+		// 			return
+		// 		}
 
-				if (!doc.privs) {
-					doc.privs = {}
-				}
-				if (!doc.encryptKeys) {
-					doc.encryptKeys = {}
-				}
+		// 		if (!doc.privs) {
+		// 			doc.privs = {}
+		// 		}
+		// 		if (!doc.encryptKeys) {
+		// 			doc.encryptKeys = {}
+		// 		}
 
-				doc.privs[privString] = true
-				if (encryptKeyString) {
-					doc.encryptKeys[privString] = encryptKeyString
-				}
-			},
-			false,
-			undefined,
-			true,
-		)
+		// 		doc.privs[privString] = true
+		// 		if (encryptKeyString) {
+		// 			doc.encryptKeys[privString] = encryptKeyString
+		// 		}
+		// 	},
+		// 	false,
+		// 	undefined,
+		// 	true,
+		// )
 	}
 
 	async _metadataIndexRemove (priv: Uint8Array) {

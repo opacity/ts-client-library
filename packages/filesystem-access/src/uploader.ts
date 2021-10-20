@@ -15,6 +15,7 @@ export interface Uploader {
 	readonly name: string
 	readonly path: string
 	readonly metadata: FileMeta
+	readonly folderLocation: Uint8Array
 
 	readonly size: number
 	readonly sizeOnFS: number

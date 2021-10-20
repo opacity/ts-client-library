@@ -11,6 +11,7 @@ export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Uploa
 	u._beforeUpload = async (u) => {
 		const file = await accountSystem.addUpload(
 			await u.getLocation(),
+			u.folderLocation,
 			await u.getEncryptionKey(),
 			u.path,
 			u.name,
@@ -23,8 +24,7 @@ export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Uploa
 
 	u._afterUpload = async () => {
 		const file = await fileMetadata
-
-		await accountSystem.finishUpload(file.location)
+		await accountSystem.finishUpload(file)
 	}
 }
 
