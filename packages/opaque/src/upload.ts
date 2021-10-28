@@ -43,7 +43,6 @@ export type OpaqueUploadArgs = {
 	path: string
 	name: string
 	meta: FileMeta
-	folderLocation: Uint8Array
 }
 
 type UploadInitPayload = {
@@ -157,7 +156,6 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 	_name: string
 	_path: string
 	_metadata: FileMeta
-	_folderLocation: Uint8Array
 
 	get name () {
 		return this._name
@@ -167,9 +165,6 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 	}
 	get metadata () {
 		return this._metadata
-	}
-	get folderLocation () {
-		return this._folderLocation
 	}
 
 	_netQueue?: OQ<Uint8Array>
@@ -224,7 +219,7 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		}
 	}
 
-	constructor ({ config, name, path, meta, folderLocation }: OpaqueUploadArgs) {
+	constructor ({ config, name, path, meta }: OpaqueUploadArgs) {
 		super()
 
 		this.config = config
@@ -235,7 +230,6 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		this._name = name
 		this._path = path
 		this._metadata = meta
-		this._folderLocation = folderLocation
 
 		this._size = this._metadata.size
 		this._sizeOnFS = sizeOnFS(this._size)
