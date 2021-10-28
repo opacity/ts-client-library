@@ -4,6 +4,7 @@ import { FileMeta } from "./filemeta"
 import { FileSystemObjectDeleteEvent } from "./events"
 import { getPayload } from "@opacity/util/src/payload"
 import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
+import { FileMetadata } from "@opacity/account-system/src"
 
 export interface IFileSystemObject {
 	readonly public: boolean
@@ -256,7 +257,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		}
 	}
 
-	async deleteMultiFile (files: []) {
+	async deleteMultiFile (files:   FileMetadata[]) {
 		const fileIDs = files.map(item => bytesToHex(item.private.handle.slice(0, 32)))
 
 		const payload = await getPayload({
