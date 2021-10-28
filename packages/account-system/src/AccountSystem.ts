@@ -534,24 +534,6 @@ export class AccountSystem {
 			markCacheDirty,
 		);
 
-
-		// await this.config.metadataAccess.change<FilesIndex>(
-		// 	this.indexes.files,
-		// 	`Mark upload ${bytesToB64URL(fileMeta.location)} finished`,
-		// 	(doc) => {
-		// 		const fileEntry = doc.files.find((file) => arraysEqual(fileMeta.location, file.location))
-
-		// 		if (!fileEntry) {
-		// 			throw new AccountSystemNotFoundError(
-		// 				"file entry",
-		// 				`"${bytesToB64URL(fileMeta.location)}" in "${bytesToB64URL(unfreezeUint8Array(fileMeta.folderDerive))}"`,
-		// 			)
-		// 		}
-
-		// 		fileEntry.finished = true
-		// 	},
-		// 	markCacheDirty,
-		// )
 	}
 
 	async setFilePrivateHandle(

@@ -33,7 +33,7 @@ export const bindDownloadToAccountSystem = (accountSystem: AccountSystem, d: Dow
 
 export const bindFileSystemObjectToAccountSystem = <T extends IFileSystemObject> (accountSystem: AccountSystem, o: T) => {
 	// handle deletion
-	o._afterDelete = async (o) => {
+	o._beforeDelete = async (o) => {
 		const fileHandle = o.handle
 		const fileLocation = o.location
 
