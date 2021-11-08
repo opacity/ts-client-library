@@ -218,30 +218,32 @@ export class MetadataAccess {
 		}
 
 		// long set
-		// await this._change<MetadataIndex>(
-		// 	metaIndexPriv,
-		// 	undefined,
-		// 	(doc) => {
-		// 		if (privString in doc) {
-		// 			return
-		// 		}
+		await this._change<MetadataIndex>(
+			metaIndexPriv,
+			undefined,
+			(doc) => {
+				if (privString in doc) {
+					return
+				}
 
-		// 		if (!doc.privs) {
-		// 			doc.privs = {}
-		// 		}
-		// 		if (!doc.encryptKeys) {
-		// 			doc.encryptKeys = {}
-		// 		}
+				if (!doc.privs) {
+					doc.privs = {}
+				}
+				if (!doc.encryptKeys) {
+					doc.encryptKeys = {}
+				}
 
-		// 		doc.privs[privString] = true
-		// 		if (encryptKeyString) {
-		// 			doc.encryptKeys[privString] = encryptKeyString
-		// 		}
-		// 	},
-		// 	false,
-		// 	undefined,
-		// 	true,
-		// )
+				doc.privs[privString] = true
+				if (encryptKeyString) {
+					doc.encryptKeys[privString] = encryptKeyString
+				}
+			},
+			false,
+			undefined,
+			true,
+		).catch(() => {
+			throw new Error("Error metadata index add");
+		})
 	}
 
 	async _metadataIndexRemove (priv: Uint8Array) {
@@ -270,7 +272,9 @@ export class MetadataAccess {
 			false,
 			undefined,
 			true,
-		)
+		).catch(() => {
+			throw new Error("Error metadata index remove");
+		})
 	}
 
 	async _multiMetadataIndexRemove (privs: Uint8Array[]) {
@@ -288,21 +292,27 @@ export class MetadataAccess {
 		})
 		
 		// long set
-		// await this._change<MetadataIndex>(
-		// 	metaIndexPriv,
-		// 	undefined,
-		// 	(doc) => {
-		// 		if (privString in doc) {
-		// 			return
-		// 		}
+		await this._change<MetadataIndex>(
+			metaIndexPriv,
+			undefined,
+			(doc) => {
+				privs.forEach(priv => {
+					const privString = bytesToB64URL(priv)
 
-		// 		delete doc.privs[privString]
-		// 		delete doc.encryptKeys[privString]
-		// 	},
-		// 	false,
-		// 	undefined,
-		// 	true,
-		// )
+					if (privString in doc) {
+						return
+					}
+	
+					delete doc.privs[privString]
+					delete doc.encryptKeys[privString]
+				})
+			},
+			false,
+			undefined,
+			true,
+		).catch(() => {
+			throw new Error("Error remove metadata index");
+		})
 	}
 
 	async change<T = unknown> (
@@ -348,7 +358,9 @@ export class MetadataAccess {
 	): Promise<Automerge.Doc<T>> {
 		// console.log("changePublic(", priv, description, fn, encryptKey, ")")
 
-		await this._metadataIndexAdd(priv, encryptKey)
+		await this._metadataIndexAdd(priv, encryptKey).catch(() => {
+			throw new Error("Error metadata index add");
+		})
 
 		return await this._change<T>(priv, description, fn, true, encryptKey, markCacheDirty)
 	}
@@ -399,12 +411,18 @@ export class MetadataAccess {
 			},
 		})
 
-		await this.config.net.POST<MetadataAddRes>(
+		const res = await this.config.net.POST<MetadataAddRes>(
 			this.config.metadataNode + "/api/v2/metadata/add",
 			undefined,
 			JSON.stringify(payload),
 			(res) => new Response(res).json(),
-		)
+		).catch(() => {
+			throw new Error("Error add metadata");
+		})
+
+		if(res.status !== 200) {
+			throw new Error("Error add metadata");
+		}
 
 		this.dags[pubString] = dag
 		this.cache[pubString] = {
@@ -496,12 +514,22 @@ export class MetadataAccess {
 			},
 		})
 
-		await this.config.net.POST<MetadataMultiAddRes>(
+		const uploadStatus = await this.config.net.POST(
 			this.config.metadataNode + "/api/v2/metadata/add-multiple",
 			undefined,
 			JSON.stringify(payload),
 			(res) => new Response(res).json(),
-		)
+		).catch(() => {
+			throw new Error("Error add metadata on finish upload catch");
+		})
+
+		if(uploadStatus.status !== 200) {
+			throw new Error("Error add metadata on finish upload status");
+		} else {
+			if(Object.keys(uploadStatus.data?.failedMetadatas).length !== 0) {
+				throw new Error("Error add metadata on finish upload with failed metadatas");
+			}
+		}
 
 		this.dags[pubString1] = dag1
 		this.cache[pubString1] = {
@@ -571,7 +599,7 @@ export class MetadataAccess {
 				(res) => new Response(res).json(),
 			)
 
-			if (((res.data as unknown) as string) == "Key not found") {
+			if (res.status !== 200) {
 				return undefined
 			}
 
@@ -689,8 +717,9 @@ export class MetadataAccess {
 
 		const priv = await this.config.crypto.derive(undefined, path)
 
-		await this._delete(priv)
-		await this._metadataIndexRemove(priv)
+		await this._delete(priv).catch(() => {
+			throw new Error("Error delete file");
+		})
 	}
 
 	async multiDelete (paths: string[]): Promise<void> {
@@ -704,15 +733,23 @@ export class MetadataAccess {
 			privs.push(priv)
 		}
 		
-		await this._multiDelete(privs)
-		await this._multiMetadataIndexRemove(privs)
+		await this._multiDelete(privs).catch(() => {
+			throw new Error("Error multiple delete");
+		})
+		// await this._multiMetadataIndexRemove(privs).catch(() => {
+		// 	throw new Error("Error multiple remove metadata index");
+		// })
 	}
 
 	async deletePublic (priv: Uint8Array): Promise<void> {
 		// console.log("deletePublic(", priv, ")")
 
-		await this._delete(priv)
-		await this._metadataIndexRemove(priv)
+		await this._delete(priv).catch(() => {
+			throw new Error("Error delete file");
+		})
+		await this._metadataIndexRemove(priv).catch(() => {
+			throw new Error("Error remove metadata index");
+		})
 	}
 
 	async _delete (priv: Uint8Array): Promise<void> {
@@ -728,13 +765,19 @@ export class MetadataAccess {
 			},
 		})
 
-		await this.config.net.POST<MetadataDeleteRes>(
+		const res = await this.config.net.POST<MetadataDeleteRes>(
 			this.config.metadataNode + "/api/v2/metadata/delete",
 			undefined,
 			JSON.stringify(payload),
 			(res) => new Response(res).json(),
-		)
+		).catch(() => {
+			throw new Error("Error delete file");
+		})
 
+		if(res.status !== 200) {
+			throw new Error("Error delete file");
+		}
+		
 		delete this.dags[pubString]
 		delete this.cache[pubString]
 	}
@@ -757,12 +800,18 @@ export class MetadataAccess {
 			},
 		})
 
-		await this.config.net.POST<MetadataDeleteRes>(
+		const res = await this.config.net.POST<MetadataDeleteRes>(
 			this.config.metadataNode + "/api/v2/metadata/delete-multiple",
 			undefined,
 			JSON.stringify(payload),
 			(res) => new Response(res).json(),
-		)
+		).catch(() => {
+			throw new Error("Error delete file");
+		})
+
+		if(res.status !== 200) {
+			throw new Error("Error delete file");
+		}
 
 		pubStrings.forEach(pubString => {
 			delete this.dags[pubString]

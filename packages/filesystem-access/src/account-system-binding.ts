@@ -16,14 +16,18 @@ export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Uploa
 			u.name,
 			u.metadata,
 			u.public,
-		)
+		).catch(() => {
+			throw new Error("Error before upload");
+		})
 
 		resolveFileMetadata(file)
 	}
 
 	u._afterUpload = async () => {
 		const file = await fileMetadata
-		await accountSystem.finishUpload(file)
+		await accountSystem.finishUpload(file).catch(() => {
+			throw new Error("Error finish upload");
+		})
 	}
 }
 
@@ -45,7 +49,9 @@ export const bindFileSystemObjectToAccountSystem = <T extends IFileSystemObject>
 			? await accountSystem.getFileMetadataLocationByFileHandle(fileHandle!)
 			: await accountSystem.getFileMetadataLocationByFileLocation(fileLocation!)
 
-		await accountSystem.removeFile(metaLocaction)
+		await accountSystem.removeFile(metaLocaction).catch(() => {
+			throw new Error("Error remove file metdata on before delete");
+		})
 	}
 
 	o._beforeConvertToPublic = async (o) => {

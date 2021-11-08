@@ -198,63 +198,37 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 			await this._beforeDelete(this)
 		}
 
-		if (this._handle) {
-			this.dispatchEvent(new FileSystemObjectDeleteEvent({}))
+		const fileID = this._handle ? this._handle.slice(0, 32) : this._location.slice(0, 32);
 
-			const fileID = this._handle.slice(0, 32)
 
-			const payload = await getPayload({
-				crypto: this.config.crypto,
-				payload: { fileID: bytesToHex(fileID) },
-			})
+		this.dispatchEvent(new FileSystemObjectDeleteEvent({}))
 
-			const res = await this.config.net.POST(
-				this.config.storageNode + "/api/v1/delete",
-				undefined,
-				JSON.stringify(payload),
-				(b) => new Response(b).text(),
-			)
+		const payload = await getPayload({
+			crypto: this.config.crypto,
+			payload: { fileID: bytesToHex(fileID) },
+		})
 
-			if (res.status != 200) {
-				throw new FileSystemObjectDeletionError(bytesToHex(fileID), res.data)
-			}
+		const res = await this.config.net.POST(
+			this.config.storageNode + "/api/v1/delete",
+			undefined,
+			JSON.stringify(payload),
+			(b) => new Response(b).text(),
+		)
 
-			if (this._afterDelete) {
-				await this._afterDelete(this)
-			}
-
-			// clear sensitive data
-			delete this._handle
+		if (res.status != 200) {
+			throw new Error("Error delete file from storage")
 		}
 
-		if (this._location) {
-			this.dispatchEvent(new FileSystemObjectDeleteEvent({}))
-
-			const fileID = this._location.slice(0, 32)
-
-			const payload = await getPayload({
-				crypto: this.config.crypto,
-				payload: { fileID: bytesToHex(fileID) },
-			})
-
-			const res = await this.config.net.POST(
-				this.config.storageNode + "/api/v1/delete",
-				undefined,
-				JSON.stringify(payload),
-				(b) => new Response(b).text(),
-			)
-
-			if (res.status != 200) {
-				throw new FileSystemObjectDeletionError(bytesToHex(fileID), res.data)
-			}
-
-			if (this._afterDelete) {
-				await this._afterDelete(this)
-			}
-
-			// clear sensitive data
-			delete this._location
+		if (this._afterDelete) {
+			await this._afterDelete(this)
 		}
+
+		// clear sensitive data
+
+		this._handle && delete this._handle;
+		this._location && delete this._location
+
+		
 	}
 
 	async deleteMultiFile (files:   FileMetadata[]) {

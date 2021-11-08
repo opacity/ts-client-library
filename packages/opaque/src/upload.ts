@@ -16,6 +16,7 @@ import {
 import {
 	IUploadEvents,
 	UploadFinishedEvent,
+	UploadErrorEvent,
 	UploadMetadataEvent,
 	UploadProgressEvent,
 	UploadStartedEvent,
@@ -260,6 +261,16 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 			u.pause()
 
 			rejectFinished(err)
+			this._timestamps.end = Date.now()
+
+			this.dispatchEvent(
+				new UploadErrorEvent({
+					start: this._timestamps.start!,
+					end: this._timestamps.end,
+				}),
+			)
+
+			throw new Error("Error uploading");
 		}
 	}
 
@@ -274,17 +285,6 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 
 		this._started = true
 		this._timestamps.start = Date.now()
-
-		// const ping = await this.config.net
-		// 	.GET(this.config.storageNode + "", undefined, undefined, async (d) =>
-		// 		new TextDecoder("utf8").decode(await new Response(d).arrayBuffer()),
-		// 	)
-		// 	.catch(this._reject)
-
-		// // server didn't respond
-		// if (!ping) {
-		// 	return
-		// }
 
 		this.dispatchEvent(new UploadMetadataEvent({ metadata: this._metadata }))
 
@@ -470,11 +470,9 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 					},
 				})
 
-				const res = (await u.config.net
+				await u.config.net
 					.POST(u.config.storageNode + "/api/v1/upload-status", {}, JSON.stringify(data))
-					.catch(u._reject)) as void
-
-				// console.log(res)
+					.catch(u._reject)
 
 				netQueue.close()
 			},

@@ -357,7 +357,7 @@ export class AccountSystem {
 		)
 
 		if (!fileEntry) {
-			throw new AccountSystemNotFoundError("file of location", bytesToHex(fileLocation.slice(0, 32)) + "...")
+			throw new Error("Error get metadata location with file location")
 		}
 
 		return fileEntry.location
@@ -415,7 +415,7 @@ export class AccountSystem {
 		const doc = await this.config.metadataAccess.get<FileMetadata>(filePath, markCacheDirty)
 
 		if (!doc) {
-			throw new AccountSystemNotFoundError("file", filePath)
+			throw new Error("Error get file metadata")
 		}
 
 		return unfreezeFileMetadata(doc)
@@ -454,7 +454,9 @@ export class AccountSystem {
 		validateDirectoryPath(path)
 		validateFilename(filename)
 
-		const folder = await this._addFolder(path, markCacheDirty)
+		const folder = await this._addFolder(path, markCacheDirty).catch(() => {
+			throw new Error("Error add folder metadata");
+		})
 		const folderDerive = folder.location
 
 		const metaLocation = await this.config.metadataAccess.config.crypto.getRandomValues(32)
@@ -483,7 +485,9 @@ export class AccountSystem {
 				}
 			},
 			markCacheDirty,
-		)
+		).catch(() => {
+			throw new Error("Error Init file metadata");
+		})
 
 		return unfreezeFileMetadata(file)
 	}
@@ -494,13 +498,13 @@ export class AccountSystem {
 		return await this._m.runExclusive(() => this._finishUpload(fileMeta, markCacheDirty))
 	}
 
-	async _finishUpload(fileMeta: FileMetadata, markCacheDirty = false): Promise<void> {
+	async _finishUpload(fileMeta: FileMetadata, markCacheDirty = false): Promise<any> {
 		// console.log("_finishUpload(", location, ")")
 
-		await this.config.metadataAccess.multiChange<any>(
+		return await this.config.metadataAccess.multiChange<any>(
 			this.indexes.files,
 			this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
-			`Add file "${fileMeta.location}" to file index && ot folder`,
+			`Add file "${fileMeta.location}" to file index && to folder`,
 			(doc) => {
 				if (!doc.files) {
 					doc.files = []
@@ -532,7 +536,7 @@ export class AccountSystem {
 				doc.size++
 			},
 			markCacheDirty,
-		);
+		)
 
 	}
 
@@ -814,34 +818,36 @@ export class AccountSystem {
 	async _removeFile(location: Uint8Array, markCacheDirty = false) {
 		// console.log("_removeFile(", location, ")")
 
-		await this.config.metadataAccess.change<FilesIndex>(
+		const fileMeta = await this._getFileMetadata(location, markCacheDirty).catch(() => {
+			throw new Error("Error get metadata index");
+		})
+
+		await this.config.metadataAccess.multiChange<any>(
 			this.indexes.files,
-			"Mark upload deleted",
+			this.getFolderDerivePath(fileMeta.folderDerive),
+			`Mark upload deleted & Remove file`,
 			(doc) => {
 				const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
 				if (!fileEntry) {
-					throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
+					throw new Error("file entry not found")
 				}
 
 				fileEntry.deleted = true
 			},
-			markCacheDirty,
-		)
-
-		const fileMeta = await this._getFileMetadata(location, markCacheDirty)
-		await this.config.metadataAccess.delete(this.getFileDerivePath(location))
-
-		await this.config.metadataAccess.change<FolderMetadata>(
-			this.getFolderDerivePath(fileMeta.folderDerive),
-			`Remove file ${location}`,
 			(doc) => {
 				const fileIndex = doc.files.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
-				doc.files.splice(fileIndex, 1)
+				fileIndex !== -1 && doc.files.splice(fileIndex, 1)
 			},
 			markCacheDirty,
-		)
+		).catch(() => {
+			throw new Error("Error Mark upload deleted & Remove file")
+		})
+
+		await this.config.metadataAccess.delete(this.getFileDerivePath(location)).catch(() => {
+			throw new Error("Error delete metadata");
+		})
 	}
 
 	async removeMultiFile(locations: Uint8Array[], markCacheDirty = false) {
@@ -851,9 +857,14 @@ export class AccountSystem {
 
 	async _removeMultiFile(locations: Uint8Array[], markCacheDirty = false) {
 
-		await this.config.metadataAccess.change<FilesIndex>(
+		const fileMeta = await this._getFileMetadata(locations[0], markCacheDirty).catch(() => {
+			throw new Error("Error get metadata index");
+		})
+
+		await this.config.metadataAccess.multiChange<any>(
 			this.indexes.files,
-			"Mark upload multi deleted",
+			this.getFolderDerivePath(fileMeta.folderDerive),
+			`Mark upload multi deleted & Remove multi file`,
 			(doc) => {
 				locations.forEach(location => {
 					const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
@@ -865,24 +876,42 @@ export class AccountSystem {
 					fileEntry.deleted = true
 				})
 			},
-			markCacheDirty,
-		)
-
-		const fileMeta = await this._getFileMetadata(locations[0], markCacheDirty)
-		await this.config.metadataAccess.multiDelete(locations.map(location => this.getFileDerivePath(location)))
-
-		await this.config.metadataAccess.change<FolderMetadata>(
-			this.getFolderDerivePath(fileMeta.folderDerive),
-			`Remove multi-file ${location}`,
 			(doc) => {
 				locations.forEach(location => {
 					const fileIndex = doc.files.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
-					doc.files.splice(fileIndex, 1)
+					fileIndex !== -1 && doc.files.splice(fileIndex, 1)
 				})
 			},
 			markCacheDirty,
-		)
+		).catch(() => {
+			throw new Error("Mark upload multi deleted & Remove multi file")
+		})
+
+		await this.config.metadataAccess.multiDelete(locations.map(location => this.getFileDerivePath(location))).catch(() => {
+			throw new Error("Error multi-delete metadata");
+		})
+	}
+
+	async _removeBrokenFile(currentPath: string, location: Uint8Array, markCacheDirty = false) {
+
+		const folderMeta = await this.getFolderIndexEntryByPath(currentPath, markCacheDirty).catch(() => {
+			throw new Error("Error get folder metadata index");
+		})
+
+		await this.config.metadataAccess.change<any>(
+			this.getFolderDerivePath(folderMeta.location),
+			"Remove corrupted file from folder",
+			
+			(doc) => {
+				const fileIndex = doc.files.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+
+				fileIndex !== -1 && doc.files.splice(fileIndex, 1)
+			},
+			markCacheDirty,
+		).catch(() => {
+			throw new Error("Error deleted corrupted file")
+		})
 	}
 
 	///////////////////////////////
@@ -942,7 +971,7 @@ export class AccountSystem {
 
 		if (!folderEntry) {
 			// TODO: orphan?
-			throw new AccountSystemNotFoundError("folder", path)
+			throw new Error("Error get folder index entry by path")
 		}
 
 		return {
@@ -1186,21 +1215,6 @@ export class AccountSystem {
 
 		const location = await this.config.metadataAccess.config.crypto.getRandomValues(32)
 
-		await this.config.metadataAccess.change<FoldersIndex>(
-			this.indexes.folders,
-			"Add folder to index",
-			(doc) => {
-				if (!doc.folders) {
-					doc.folders = []
-				}
-				doc.folders.push({
-					location: location,
-					path,
-				})
-			},
-			markCacheDirty,
-		)
-
 		const doc = await this.config.metadataAccess.change<FolderMetadata>(
 			this.getFolderDerivePath(location),
 			"Init folder metadata",
@@ -1214,8 +1228,27 @@ export class AccountSystem {
 				doc.files = []
 			},
 			markCacheDirty,
-		)
+		).catch(() => {
+			throw new Error("Error Init folder metadata");
+		})
 
+		await this.config.metadataAccess.change<FoldersIndex>(
+			this.indexes.folders,
+			"Add folder to index",
+			(doc) => {
+				if (!doc.folders) {
+					doc.folders = []
+				}
+				doc.folders.push({
+					location: location,
+					path,
+				})
+			},
+			markCacheDirty,
+		).catch(() => {
+			throw new Error("Error Add folder to index");
+		})
+		
 		return unfreezeFolderMetadata(doc)
 	}
 
@@ -1351,7 +1384,20 @@ export class AccountSystem {
 			(doc) => {
 				const folderIndex = doc.folders.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
 
-				doc.folders.splice(folderIndex, 1)
+				folderIndex !== -1 && doc.folders.splice(folderIndex, 1)
+			},
+			markCacheDirty,
+		)
+	}
+
+	async _removeBrokenFolder(location: Uint8Array, markCacheDirty = false) {
+		await this.config.metadataAccess.change<FoldersIndex>(
+			this.indexes.folders,
+			`Remove broken folder ${bytesToB64URL(location)}`,
+			(doc) => {
+				const folderIndex = doc.folders.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+
+				folderIndex !== -1 && doc.folders.splice(folderIndex, 1)
 			},
 			markCacheDirty,
 		)
