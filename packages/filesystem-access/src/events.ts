@@ -67,6 +67,7 @@ export enum UploadEvents {
 	START = "start",
 	FINISH = "finish",
 	PROGRESS = "progress",
+	ERROR = "error",
 }
 
 type UploadMetadataEventData = { metadata: FileMeta }
@@ -91,6 +92,12 @@ type UploadProgressEventData = { progress: number }
 export class UploadProgressEvent extends CustomEvent<UploadProgressEventData> {
 	constructor (data: UploadProgressEventData) {
 		super(UploadEvents.PROGRESS, { detail: data })
+	}
+}
+type UploadErrorEventData = { start: number; end: number; }
+export class UploadErrorEvent extends CustomEvent<UploadErrorEventData> {
+	constructor (data: UploadErrorEventData) {
+		super(UploadEvents.ERROR, { detail: data })
 	}
 }
 
