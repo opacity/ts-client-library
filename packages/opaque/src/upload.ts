@@ -1,5 +1,4 @@
 import { Mutex } from "async-mutex"
-
 import { blockSize, blockSizeOnFS, numberOfBlocks, sizeOnFS } from "@opacity/util/src/blocks"
 import { bytesToHex } from "@opacity/util/src/hex"
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware"
@@ -17,6 +16,7 @@ import {
 	IUploadEvents,
 	UploadFinishedEvent,
 	UploadErrorEvent,
+	UploadCancelEvent,
 	UploadMetadataEvent,
 	UploadProgressEvent,
 	UploadStartedEvent,
@@ -141,6 +141,7 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 	_finished: Promise<void>
 	_resolve: (value?: void) => void
 	_reject: (reason?: any) => void
+	_cancel: (reason?: any) => void
 
 	_size: number
 	_sizeOnFS: number
@@ -254,6 +255,22 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 					realDuration: this._timestamps.end - this._timestamps.start!,
 				}),
 			)
+		}
+		this._cancel = (err) => {
+			u._cancelled = true
+
+			u.pause()
+
+			rejectFinished(err)
+			this._timestamps.end = Date.now()
+
+			this.dispatchEvent(
+				new UploadCancelEvent({
+					start: this._timestamps.start!,
+					end: this._timestamps.end,
+				}),
+			)
+
 		}
 		this._reject = (err) => {
 			u._errored = true
@@ -399,9 +416,14 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 							}
 
 							await encryptQueue.waitForCommit(blockIndex - 1)
-
+							if (u._cancelled || u._errored) {
+								return
+							}
 							const res = await new Retry(
 								async () => {
+									if (u._cancelled || u._errored) {
+										return
+									}
 									const fd = await getPayloadFD<UploadPayload, UploadExtraPayload>({
 										crypto: u.config.crypto,
 										payload: {
@@ -451,6 +473,10 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 			}) as WritableStream<Uint8Array>,
 		)
 
+		if (u._cancelled || u._errored) {
+			return
+		}
+
 		encryptQueue.add(
 			numberOfBlocks(u._size),
 			() => {},
@@ -459,6 +485,10 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 			},
 		)
 
+		if (u._cancelled || u._errored) {
+			return
+		}
+		
 		netQueue.add(
 			u._numberOfParts,
 			() => {},
@@ -478,8 +508,15 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 			},
 		)
 
+		if (u._cancelled || u._errored) {
+			return
+		}
+
 		Promise.all([encryptQueue.waitForClose(), netQueue.waitForClose()]).then(async () => {
 			if (this._afterUpload) {
+				if (u._cancelled || u._errored) {
+					return
+				}
 				await this._afterUpload(u).catch(u._reject)
 			}
 
@@ -495,6 +532,6 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 
 	async cancel () {
 		this._cancelled = true
-		this._reject()
+		this._cancel()
 	}
 }
