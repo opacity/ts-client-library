@@ -120,6 +120,12 @@ export type ShareMetadata = {
 	files: ShareFileMetadata[]
 }
 
+export type UploadThread = {
+	uploaderId: string
+	isUploading: boolean
+	isCancelled: boolean
+}
+
 export class AccountSystemLengthError extends Error {
 	constructor(item: string, min: number, max: number, recieved: number) {
 		super(`AccountSystemLengthError: Invalid length of "${item}". Expected between ${min} and ${max}. Got ${recieved}`)
@@ -270,6 +276,8 @@ export class AccountSystem {
 	}
 
 	_m = new Mutex()
+
+	_uploadThreads:UploadThread[] = []
 
 	constructor(config: AccountSystemConfig) {
 		this.config = config
@@ -492,52 +500,95 @@ export class AccountSystem {
 		return unfreezeFileMetadata(file)
 	}
 
-	async finishUpload(fileMeta: FileMetadata, markCacheDirty = false): Promise<void> {
-		// console.log("finishUpload(", location, ")")
 
-		return await this._m.runExclusive(() => this._finishUpload(fileMeta, markCacheDirty))
+	async cancelUpload(uploaderId: string): Promise<boolean> {
+		const uploaderIndex = this._uploadThreads.findIndex(item => item.uploaderId === uploaderId)
+
+		if(uploaderIndex > -1) {
+			if(this._uploadThreads[uploaderIndex].isUploading === false) {
+				this._uploadThreads[uploaderIndex].isCancelled = true
+			} else {
+				return false
+			}
+		} else {
+			this._uploadThreads.push({
+				uploaderId,
+				isUploading: false,
+				isCancelled: true,
+			})
+		}
+		return true
 	}
 
-	async _finishUpload(fileMeta: FileMetadata, markCacheDirty = false): Promise<any> {
+	async finishUpload(fileMeta: FileMetadata, uploaderId: string, markCacheDirty = false): Promise<void> {
+
+		const release = await this._m.acquire()
+		
+		const uploaderIndex = this._uploadThreads.findIndex(item => item.uploaderId === uploaderId)
+		if(uploaderIndex > -1) {
+			this._uploadThreads[uploaderIndex].isUploading = true
+		} else {
+			this._uploadThreads.push({
+				uploaderId,
+				isUploading: true,
+				isCancelled: false,
+			})
+		}
+		const res = await this._finishUpload(fileMeta, uploaderId, markCacheDirty)
+
+		release()
+
+		return res
+	}
+
+	async _finishUpload(fileMeta: FileMetadata, uploaderId: string, markCacheDirty = false): Promise<any> {
 		// console.log("_finishUpload(", location, ")")
+		const uploaderIndex = this._uploadThreads.findIndex(item => item.uploaderId === uploaderId)
 
-		return await this.config.metadataAccess.multiChange<any>(
-			this.indexes.files,
-			this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
-			`Add file "${fileMeta.location}" to file index && to folder`,
-			(doc) => {
-				if (!doc.files) {
-					doc.files = []
-				}
-				doc.files.push({
-					location: fileMeta.location,
-					finished: true,
-					private: {
-						handle: fileMeta.private.handle,
-					},
-					public: {
-						location: null,
-						shortLinks: []
-					},
-					deleted: false,
-					errored: false,
-				})
-			},
-			(doc) => {
-				if (!doc.files) {
-					doc.files = []
-				}
-				doc.files.push({
-					name: fileMeta.name,
-					location: fileMeta.location,
-				})
+		if(uploaderIndex > -1 && this._uploadThreads[uploaderIndex].isCancelled === false) {
+			const res = await this.config.metadataAccess.multiChange<any>(
+				this.indexes.files,
+				this.getFolderDerivePath(unfreezeUint8Array(fileMeta.folderDerive)),
+				`Add file "${fileMeta.location}" to file index && to folder`,
+				(doc:any) => {
+					if (!doc.files) {
+						doc.files = []
+					}
+					doc.files.push({
+						location: fileMeta.location,
+						finished: true,
+						private: {
+							handle: fileMeta.private.handle,
+						},
+						public: {
+							location: null,
+							shortLinks: []
+						},
+						deleted: false,
+						errored: false,
+					})
+				},
+				(doc:any) => {
+					if (!doc.files) {
+						doc.files = []
+					}
+					doc.files.push({
+						name: fileMeta.name,
+						location: fileMeta.location,
+					})
+	
+					doc.modified = Date.now()
+					doc.size++
+				},
+				markCacheDirty,
+			)
+			
+			this._uploadThreads.slice(uploaderIndex, 1)
 
-				doc.modified = Date.now()
-				doc.size++
-			},
-			markCacheDirty,
-		)
-
+			return res
+		} else {
+			return null
+		}
 	}
 
 	async setFilePrivateHandle(
@@ -608,7 +659,7 @@ export class AccountSystem {
 		const fileEntry = filesIndex.files.find((fileEntry) => arraysEqual(fileEntry.location, location))
 
 		if (!fileEntry) {
-			throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
+			throw new Error("File entry does not exist")
 		}
 
 		await this.config.metadataAccess.change<FilesIndex>(
@@ -826,8 +877,8 @@ export class AccountSystem {
 			this.indexes.files,
 			this.getFolderDerivePath(fileMeta.folderDerive),
 			`Mark upload deleted & Remove file`,
-			(doc) => {
-				const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+			(doc:any) => {
+				const fileEntry = doc.files.find((file:any) => arraysEqual(unfreezeUint8Array(file.location), location))
 
 				if (!fileEntry) {
 					throw new Error("file entry not found")
@@ -835,8 +886,8 @@ export class AccountSystem {
 
 				fileEntry.deleted = true
 			},
-			(doc) => {
-				const fileIndex = doc.files.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+			(doc:any) => {
+				const fileIndex = doc.files.findIndex((file:any) => arraysEqual(unfreezeUint8Array(file.location), location))
 
 				fileIndex !== -1 && doc.files.splice(fileIndex, 1)
 			},
@@ -865,9 +916,9 @@ export class AccountSystem {
 			this.indexes.files,
 			this.getFolderDerivePath(fileMeta.folderDerive),
 			`Mark upload multi deleted & Remove multi file`,
-			(doc) => {
+			(doc:any) => {
 				locations.forEach(location => {
-					const fileEntry = doc.files.find((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+					const fileEntry = doc.files.find((file:any) => arraysEqual(unfreezeUint8Array(file.location), location))
 
 					if (!fileEntry) {
 						throw new AccountSystemNotFoundError("file entry", bytesToB64URL(location))
@@ -876,9 +927,9 @@ export class AccountSystem {
 					fileEntry.deleted = true
 				})
 			},
-			(doc) => {
+			(doc:any) => {
 				locations.forEach(location => {
-					const fileIndex = doc.files.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+					const fileIndex = doc.files.findIndex((file:any) => arraysEqual(unfreezeUint8Array(file.location), location))
 
 					fileIndex !== -1 && doc.files.splice(fileIndex, 1)
 				})
@@ -903,8 +954,8 @@ export class AccountSystem {
 			this.getFolderDerivePath(folderMeta.location),
 			"Remove corrupted file from folder",
 			
-			(doc) => {
-				const fileIndex = doc.files.findIndex((file) => arraysEqual(unfreezeUint8Array(file.location), location))
+			(doc:any) => {
+				const fileIndex = doc.files.findIndex((file:any) => arraysEqual(unfreezeUint8Array(file.location), location))
 
 				fileIndex !== -1 && doc.files.splice(fileIndex, 1)
 			},

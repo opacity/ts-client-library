@@ -24,9 +24,11 @@ export interface Uploader {
 	readonly startTime: number | undefined
 	readonly endTime: number | undefined
 	readonly pauseDuration: number
+	readonly uploaderId: string
 
 	_beforeUpload?: (u: this) => Promise<void>
-	_afterUpload?: (u: this) => Promise<void>
+	_afterUpload?: (uploaderId: string) => Promise<void>
+	_cancelUpload?: (uploaderId: string) => Promise<boolean>
 
 	pause(): Promise<void>
 	unpause(): Promise<void>
@@ -34,5 +36,5 @@ export interface Uploader {
 	start(): Promise<TransformStream<Uint8Array, Uint8Array> | undefined>
 	finish(): Promise<void>
 
-	cancel(): Promise<void>
+	cancel(): Promise<boolean>
 }
