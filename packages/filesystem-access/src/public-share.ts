@@ -132,7 +132,7 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		}
 
 		if (!this._fileLocation) {
-			throw new FileSystemShareMissingDataError("file location")
+			throw new Error("file location does not exist")
 		}
 
 		if (this._beforePublicShare) {
@@ -158,7 +158,7 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		)
 
 		if (!res.ok) {
-			throw new FileSystemShareCreateShortlinkError(res.data.toString())
+			throw new Error(res.data.toString())
 		}
 
 		if (this._afterPublicShare) {
@@ -175,11 +175,11 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 
 	async publicShareRevoke (): Promise<void> {
 		if (!this._shortlink) {
-			throw new FileSystemShareMissingDataError("shortlink")
+			throw new Error("Failed detect shortlink")
 		}
 
 		if (!this._fileLocation) {
-			throw new FileSystemShareMissingDataError("file location")
+			throw new Error("Failed file location")
 		}
 
 		if (this._beforePublicShareRevoke) {
@@ -201,7 +201,7 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		)
 
 		if (!res.ok) {
-			throw new FileSystemShareRevokeShortlinkError(res.data.toString())
+			throw new Error(res.data.toString())
 		}
 
 		if (this._afterPublicShareRevoke) {

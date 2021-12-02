@@ -95,7 +95,7 @@ export class UploadProgressEvent extends CustomEvent<UploadProgressEventData> {
 		super(UploadEvents.PROGRESS, { detail: data })
 	}
 }
-type UploadErrorEventData = { start: number; end: number; }
+type UploadErrorEventData = { start: number; end: number; error: string }
 export class UploadErrorEvent extends CustomEvent<UploadErrorEventData> {
 	constructor (data: UploadErrorEventData) {
 		super(UploadEvents.ERROR, { detail: data })

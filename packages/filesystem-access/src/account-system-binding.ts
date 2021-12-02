@@ -16,18 +16,20 @@ export const bindUploadToAccountSystem = (accountSystem: AccountSystem, u: Uploa
 			u.name,
 			u.metadata,
 			u.public,
-		).catch(() => {
-			throw new Error("Error before upload");
+		).catch((e) => {
+			throw new Error(e);
 		})
 
 		resolveFileMetadata(file)
 	}
 
-	u._afterUpload = async () => {
+	u._afterUpload = async (uploaderId) => {
 		const file = await fileMetadata
-		await accountSystem.finishUpload(file).catch(() => {
-			throw new Error("Error finish upload");
-		})
+		return await accountSystem.finishUpload(file, uploaderId)
+	}
+
+	u._cancelUpload = async (uploaderId) => {
+		return accountSystem.cancelUpload(uploaderId)
 	}
 }
 

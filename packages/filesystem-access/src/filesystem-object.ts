@@ -275,11 +275,11 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 
 	async convertToPublic (): Promise<void> {
 		if (this._location) {
-			throw new FileSystemObjectConvertPublicError("file is already public")
+			throw new Error("file is already public")
 		}
 
 		if (!this._handle) {
-			throw new FileSystemObjectConvertPublicError("file has no private source")
+			throw new Error("file has no private source")
 		}
 
 		if (this._beforeConvertToPublic) {

@@ -169,6 +169,11 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		return this._metadata
 	}
 
+	_uploaderId: string
+	
+	get uploaderId () {
+		return this._uploaderId
+	}
 	_netQueue?: OQ<Uint8Array>
 	_encryptQueue?: OQ<Uint8Array>
 
@@ -195,7 +200,8 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 	}
 
 	_beforeUpload?: (u: Uploader) => Promise<void>
-	_afterUpload?: (u: Uploader) => Promise<void>
+	_afterUpload?: (uploaderId: string) => Promise<void>
+	_cancelUpload?: (uploaderId: string) => Promise<boolean>
 
 	async pause () {
 		if (this._paused) {
@@ -232,7 +238,7 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		this._name = name
 		this._path = path
 		this._metadata = meta
-
+		this._uploaderId = meta.size + name + path
 		this._size = this._metadata.size
 		this._sizeOnFS = sizeOnFS(this._size)
 		this._numberOfBlocks = numberOfBlocks(this._size)
@@ -284,6 +290,7 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 				new UploadErrorEvent({
 					start: this._timestamps.start!,
 					end: this._timestamps.end,
+					error: err
 				}),
 			)
 
@@ -306,7 +313,9 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		this.dispatchEvent(new UploadMetadataEvent({ metadata: this._metadata }))
 
 		const u = this
-
+		if (this._cancelled || this._errored) {
+			return
+		}
 		if (this._beforeUpload) {
 			await this._beforeUpload(u).catch(u._reject)
 		}
@@ -321,7 +330,9 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 				} as FileMeta),
 			),
 		)
-
+		if (this._cancelled || this._errored) {
+			return
+		}
 		const fd = await getPayloadFD<UploadInitPayload, UploadInitExtraPayload>({
 			crypto: u.config.crypto,
 			payload: {
@@ -333,8 +344,10 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 				metadata: encryptedMeta,
 			},
 		})
-
-		await u.config.net.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(u._reject)
+		if (this._cancelled || this._errored) {
+			return
+		}
+		await u.config.net.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(e => u._reject("Failed init file on upload!"))
 
 		u.dispatchEvent(
 			new UploadStartedEvent({
@@ -410,6 +423,9 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 										}
 
 										u.dispatchEvent(new OpaqueUploadBlockFinishedEvent({ index: blockIndex }))
+										if (u._cancelled || u._errored) {
+											return
+										}
 										u.dispatchEvent(new UploadProgressEvent({ progress: blockIndex / u._numberOfBlocks }))
 									},
 								)
@@ -448,7 +464,7 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 								},
 							)
 								.start()
-								.catch(u._reject)
+								.catch(e => u._reject("Failed upload chunk"))
 
 							if (!res) {
 								return
@@ -499,10 +515,12 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 						fileHandle: bytesToHex(await u.getLocation()),
 					},
 				})
-
+				if (this._cancelled || this._errored) {
+					return
+				}
 				await u.config.net
 					.POST(u.config.storageNode + "/api/v1/upload-status", {}, JSON.stringify(data))
-					.catch(u._reject)
+					.catch(e => u._reject("Failed upload status"))
 
 				netQueue.close()
 			},
@@ -517,10 +535,15 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 				if (u._cancelled || u._errored) {
 					return
 				}
-				await this._afterUpload(u).catch(u._reject)
+				await this._afterUpload(this.uploaderId).catch(u._reject).then(res => {
+					if(res === null) {
+						u._cancel()
+					} else {
+						u._resolve()
+					}
+				})
 			}
 
-			u._resolve()
 		})
 
 		return u._output
@@ -530,8 +553,13 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		return this._finished
 	}
 
-	async cancel () {
-		this._cancelled = true
-		this._cancel()
+	async cancel (): Promise<boolean>  {
+		if (this._cancelUpload) {
+			if(this._cancelUpload(this.uploaderId)) {
+				this._cancel()
+				return true
+			}
+		}
+		return false
 	}
 }
