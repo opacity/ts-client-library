@@ -158,7 +158,7 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		)
 
 		if (!res.ok) {
-			throw new Error(res.data.toString())
+			throw new Error(`Error public-share shortlink get: ${res.data}`)
 		}
 
 		if (this._afterPublicShare) {
@@ -201,7 +201,7 @@ export class FileSystemShare extends EventTarget implements IFileSystemShare {
 		)
 
 		if (!res.ok) {
-			throw new Error(res.data.toString())
+			throw new Error(`Error revoke public share: ${res.data.toString()}`)
 		}
 
 		if (this._afterPublicShareRevoke) {

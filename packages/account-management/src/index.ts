@@ -310,8 +310,8 @@ export class Account {
 			(body) => new Response(body).json(),
 		)
 
-		if (!res.ok || !res.data.invoice) {
-			throw new Error("Error getting invoice")
+		if (!res.ok || !res.data?.invoice) {
+			throw new Error(`Error getting invoice: ${res.data}`)
 		}
 
 		return res.data.invoice
@@ -357,8 +357,8 @@ export class Account {
 			(body) => new Response(body).json(),
 		)
 
-		if (!res.ok || !res.data.status) {
-			throw new Error("Error getting renewal status")
+		if (!res.ok || !res.data?.status) {
+			throw new Error(`Error getting renewal status ${res.data}`)
 		}
 
 		return res.data.status
@@ -379,8 +379,8 @@ export class Account {
 			(body) => new Response(body).json(),
 		)
 
-		if (!res.ok || !res.data.opctInvoice) {
-			throw new Error("Error getting renewal invoice")
+		if (!res.ok || !res.data?.opctInvoice) {
+			throw new Error(`Error getting renewal invoice ${res.data}`)
 		}
 
 		return res.data.opctInvoice
@@ -428,8 +428,8 @@ export class Account {
 			(body) => new Response(body).json(),
 		)
 
-		if (!res.ok || !res.data.status) {
-			throw new Error("Error getting upgrade status")
+		if (!res.ok || !res.data?.status) {
+			throw new Error(`Error getting upgrade status ${res.data}`)
 		}
 
 		return res.data.status
@@ -450,8 +450,8 @@ export class Account {
 			(body) => new Response(body).json(),
 		)
 
-		if (!res.ok || !res.data.opctInvoice) {
-			throw new Error("Error getting upgrade invoice")
+		if (!res.ok || !res.data?.opctInvoice) {
+			throw new Error(`Error getting upgrade invoice ${res.data}`)
 		}
 
 		return res.data.opctInvoice
@@ -494,8 +494,8 @@ export class Account {
 			(body) => new Response(body).json(),
 		)
 
-		if (!res.ok || !res.data.contracts) {
-			throw new Error("Error getting Smart Contracts")
+		if (!res.ok || !res.data?.contracts) {
+			throw new Error(`Error getting Smart Contracts ${res.data}`)
 		}
 
 		return res.data.contracts
