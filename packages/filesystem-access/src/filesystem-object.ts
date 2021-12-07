@@ -116,7 +116,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 			)
 
 			if (res.status != 200 || !res.data) {
-				throw new Error("_getDownloadURL: failed to get download url")
+				throw new Error(`_getDownloadURL: failed to get download private url: ${res.data}`)
 			}
 
 			return res.data
@@ -133,7 +133,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 			)
 
 			if (res.status != 200 || !res.data) {
-				throw new Error("_getDownloadURL: failed to get download url")
+				throw new Error(`_getDownloadURL: failed to get public download url: ${res.data}`)
 			}
 
 			return res.data
@@ -216,7 +216,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		)
 
 		if (res.status != 200) {
-			throw new Error("Error delete file from storage")
+			throw new Error(`Error delete file from storage: ${res.data}`)
 		}
 
 		if (this._afterDelete) {
@@ -247,7 +247,7 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 		)
 
 		if (res.status != 200) {
-			throw new FileSystemObjectDeletionError('file ids', res.data)
+			throw new Error(`Error delete multi-file storage: ${res.data}`)
 		}
 	}
 
@@ -302,6 +302,9 @@ export class FileSystemObject extends EventTarget implements IFileSystemObject {
 			(b) => new Response(b).json(),
 		)
 
+		if(!res.ok) {
+			throw new Error(`Error convert public share: ${res.data}`)
+		}
 		if (this._afterConvertToPublic) {
 			await this._afterConvertToPublic(this)
 		}

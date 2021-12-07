@@ -421,7 +421,7 @@ export class MetadataAccess {
 		})
 
 		if(res.status !== 200) {
-			throw new Error("Error add metadata");
+			throw new Error(`Error add metadata: ${res.data}`);
 		}
 
 		this.dags[pubString] = dag
@@ -520,14 +520,14 @@ export class MetadataAccess {
 			JSON.stringify(payload),
 			(res) => new Response(res).json(),
 		).catch(() => {
-			throw new Error("Error add metadata on finish upload catch");
+			throw new Error("Error add multiple metadata");
 		})
 
 		if(uploadStatus.status !== 200) {
-			throw new Error("Error add metadata on finish upload status");
+			throw new Error(`Error add multiple metadata: ${uploadStatus.data}`);
 		} else {
 			if(Object.keys(uploadStatus.data?.failedMetadatas).length !== 0) {
-				throw new Error("Error add metadata on finish upload with failed metadatas");
+				throw new Error(`Error add multiple metadata with failed metadatas ${uploadStatus.data?.failedMetadatas.join(",")}`);
 			}
 		}
 
@@ -676,7 +676,13 @@ export class MetadataAccess {
 					}),
 				}),
 				(res) => new Response(res).json(),
-			)
+			).catch(err => {
+				throw new Error("Error get public");
+			})
+
+			if (!res.ok) {
+				throw new Error(`Error get-public: ${res.data}`)
+			}
 
 			const dag = DAG.fromBinary(b64URLToBytes(res.data.metadataV2))
 			this.dags[pubString] = dag
@@ -775,7 +781,7 @@ export class MetadataAccess {
 		})
 
 		if(res.status !== 200) {
-			throw new Error("Error delete file");
+			throw new Error(`Error delete file: ${res.data}`);
 		}
 		
 		delete this.dags[pubString]
@@ -810,7 +816,7 @@ export class MetadataAccess {
 		})
 
 		if(res.status !== 200) {
-			throw new Error("Error delete file");
+			throw new Error(`Error delete file: ${res.data}`);
 		}
 
 		pubStrings.forEach(pubString => {
