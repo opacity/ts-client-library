@@ -347,7 +347,11 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		if (this._cancelled || this._errored) {
 			return
 		}
-		await u.config.net.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(e => u._reject("Failed init file on upload!"))
+
+		const requestHeaders: HeadersInit = new Headers();
+		requestHeaders.set('Content-Type', 'application/json');
+
+		await u.config.net.POST(u.config.storageNode + "/api/v1/init-upload", requestHeaders, fd).catch(e => u._reject("Failed init file on upload!"))
 
 		u.dispatchEvent(
 			new UploadStartedEvent({
