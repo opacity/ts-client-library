@@ -185,9 +185,12 @@ export class MetadataAccess {
 							},
 						})
 
+						const requestHeaders: HeadersInit = new Headers();
+						requestHeaders.set('Content-Type', 'application/json');
+
 						const res = await this.config.net.POST<MetadataGetRes>(
 							this.config.metadataNode + "/api/v2/metadata/get",
-							undefined,
+							requestHeaders,
 							JSON.stringify(payload),
 							(res) => new Response(res).json(),
 						)
@@ -592,9 +595,12 @@ export class MetadataAccess {
 				},
 			})
 
+			const requestHeaders: HeadersInit = new Headers();
+			requestHeaders.set('Content-Type', 'application/json');
+
 			const res = await this.config.net.POST<MetadataGetRes>(
 				this.config.metadataNode + "/api/v2/metadata/get",
-				undefined,
+			  requestHeaders,
 				JSON.stringify(payload),
 				(res) => new Response(res).json(),
 			)
