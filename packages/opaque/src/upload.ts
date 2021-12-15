@@ -347,7 +347,11 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 		if (this._cancelled || this._errored) {
 			return
 		}
-		await u.config.net.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(e => u._reject("Failed init file on upload!"))
+		const resInitUpload = await u.config.net.POST(u.config.storageNode + "/api/v1/init-upload", {}, fd).catch(e => u._reject("Failed init file on upload!"))
+		
+		if (!resInitUpload.ok) {
+			u._reject("Failed init file on upload: " + JSON.stringify(resInitUpload.data))
+		}
 
 		u.dispatchEvent(
 			new UploadStartedEvent({
@@ -518,9 +522,14 @@ export class OpaqueUpload extends EventTarget implements Uploader, IUploadEvents
 				if (this._cancelled || this._errored) {
 					return
 				}
-				await u.config.net
+				const resUploadStatus = await u.config.net
 					.POST(u.config.storageNode + "/api/v1/upload-status", {}, JSON.stringify(data))
 					.catch(e => u._reject("Failed upload status"))
+				
+				if (!resUploadStatus.ok) {
+					u._reject("Failed upload status: " + JSON.stringify(resUploadStatus.data))
+				}
+
 
 				netQueue.close()
 			},
