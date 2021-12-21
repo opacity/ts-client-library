@@ -138,7 +138,8 @@ export class OQ<S, T = void> {
 
 		const [workPromise, resolveReadyForWork] = extractPromise<void>()
 
-		let release = await this._m.acquire()
+		//TODO: Investigate why this lock is here and if it is actually needed
+		// let release = await this._m.acquire()
 		const i = this._queue.findIndex(([n2]) => n < n2)
 		this._queue.splice(i == -1 ? this._queue.length : i, 0, [n, resolveReadyForWork])
 
@@ -149,7 +150,8 @@ export class OQ<S, T = void> {
 		}
 
 		this._u++
-		release()
+		//TODO: Investigate why this lock is here and if it is actually needed
+		// release()
 
 		await workPromise
 
@@ -188,7 +190,7 @@ export class OQ<S, T = void> {
 		// console.log("checkout: " + n)
 
 		const v = await cfn(await Promise.resolve(w), n)
-		release = await this._m.acquire()
+		const release = await this._m.acquire()
 		this._o++
 		this._e.dispatchEvent(new ProgressEvent("checkout", { loaded: this._o }))
 		release()
