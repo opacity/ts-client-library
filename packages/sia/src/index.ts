@@ -1,3 +1,4 @@
+export { Sia, SiaArgs, SiaConfig } from "./download"
 export { SiaUpload, SiaUploadArgs, SiaUploadConfig } from "./upload"
 
 export {
