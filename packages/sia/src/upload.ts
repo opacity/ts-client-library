@@ -1,6 +1,6 @@
 import { Mutex } from "async-mutex";
 
-import { blockSize, blockSizeOnFS, numberOfBlocks, sizeOnFS } from "@opacity/util/src/blocks";
+import { numberOfBlocks, sizeOnFS } from "@opacity/util/src/blocks";
 import { bytesToHex } from "@opacity/util/src/hex";
 import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware";
 import { extractPromise } from "@opacity/util/src/promise";
@@ -8,19 +8,15 @@ import { FileMeta } from "@opacity/filesystem-access/src/filemeta";
 import { getPayload, getPayloadFD } from "@opacity/util/src/payload";
 import {
   ISiaUploadEvents,
-  SiaUploadBlockFinishedEvent,
-  SiaUploadBlockStartedEvent,
-  SiaUploadPartFinishedEvent,
   SiaUploadPartStartedEvent,
 } from "./events";
 import {
   IUploadEvents,
   UploadFinishedEvent,
   UploadMetadataEvent,
-  UploadProgressEvent,
   UploadStartedEvent,
 } from "@opacity/filesystem-access/src/events";
-import { numberOfPartsOnFS, partSize } from "@opacity/util/src/parts";
+import { numberOfPartsOnFS } from "@opacity/util/src/parts";
 import { OQ } from "@opacity/util/src/oqueue";
 import { Retry } from "@opacity/util/src/retry";
 import { TransformStream, WritableStream, Uint8ArrayChunkStream } from "@opacity/util/src/streams";
@@ -179,8 +175,8 @@ export class SiaUpload extends EventTarget implements Uploader, IUploadEvents, I
     return this._timestamps.end;
   }
 
-  _beforeUpload?: (u: Uploader) => Promise<void>;
-  _afterUpload?: (u: Uploader) => Promise<void>;
+  _beforeUpload?: (u: Uploader | any) => Promise<void>;
+  _afterUpload?: (u: Uploader | any) => Promise<void>;
 
   constructor({ config, name, path, meta }: SiaUploadArgs) {
     super();

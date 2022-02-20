@@ -183,12 +183,8 @@ export class SiaDownload extends EventTarget implements Downloader, IDownloadEve
 		}
 	}
 
-	async getDownloadUrl (): Promise<string | undefined> {
+	async downlaod (): Promise<string | undefined> {
 		return this._m.runExclusive(async () => {
-			if (this._downloadUrl) {
-				return this._downloadUrl
-			}
-
 			const d = this
 
 			const downloadUrlRes = await d.config.net
@@ -204,11 +200,9 @@ export class SiaDownload extends EventTarget implements Downloader, IDownloadEve
 				return
 			}
 
-			const downloadUrl = downloadUrlRes.data
+			const fileData = downloadUrlRes.data
 
-			this._downloadUrl = downloadUrl
-
-			return downloadUrl
+			return fileData
 		})
 	}
 
