@@ -139,8 +139,8 @@ export class SiaDownload extends EventTarget implements Downloader, IDownloadEve
 		return this._timestamps.pauseDuration
 	}
 
-	_beforeDownload?: (d: Downloader) => Promise<void>
-	_afterDownload?: (d: Downloader) => Promise<void>
+	_beforeDownload?: (d: Downloader | any) => Promise<void>
+	_afterDownload?: (d: Downloader | any) => Promise<void>
 
 
 	constructor ({ config, handle, name, fileMeta }: SiaDownloadArgs) {
