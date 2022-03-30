@@ -30,7 +30,7 @@ import {
 } from "@opacity/util/src/streams"
 import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
-import { FileMetadata } from "@opacity/account-system/src"
+import { AccountSystem, FileMetadata } from "@opacity/account-system/src"
 
 export type SiaDownloadConfig = {
 	storageNode: string
@@ -49,9 +49,10 @@ export type SiaDownloadArgs = {
 	handle: Uint8Array
 	name: string
 	fileMeta: FileMetadata
+	accountSystem: AccountSystem
 }
 
-export class SiaDownload extends EventTarget implements Downloader, IDownloadEvents, ISiaDownloadEvents {
+export class SiaDownload extends EventTarget implements Downloader,  IDownloadEvents, ISiaDownloadEvents {
 	readonly public = false
 
 	config: SiaDownloadConfig
@@ -111,8 +112,9 @@ export class SiaDownload extends EventTarget implements Downloader, IDownloadEve
 		return this._sizeOnFS
 	}
 
-	_downloadUrl?: string
 	_metadata?: FileMeta
+	_accountSystem? : AccountSystem | any
+
 
 	_netQueue?: OQ<void>
 	_decryptQueue?: OQ<Uint8Array>
@@ -143,7 +145,7 @@ export class SiaDownload extends EventTarget implements Downloader, IDownloadEve
 	_afterDownload?: (d: Downloader | any) => Promise<void>
 
 
-	constructor ({ config, handle, name, fileMeta }: SiaDownloadArgs) {
+	constructor ({ config, handle, name, fileMeta, accountSystem }: SiaDownloadArgs) {
 		super()
 
 		this.config = config
@@ -157,6 +159,7 @@ export class SiaDownload extends EventTarget implements Downloader, IDownloadEve
 		this._name = name
 
 		this._fileMeta = fileMeta
+		this._accountSystem = accountSystem
 
 		const d = this
 
@@ -183,27 +186,185 @@ export class SiaDownload extends EventTarget implements Downloader, IDownloadEve
 		}
 	}
 
-	async downlaod (): Promise<string | undefined> {
-		return this._m.runExclusive(async () => {
-			const d = this
+	async start (): Promise<ReadableStream<Uint8Array> | undefined> {
+		if (this._cancelled || this._errored) {
+			return
+		}
 
-			const downloadUrlRes = await d.config.net
-				.POST(
-					d.config.storageNode + "/api/v2/sia/download",
-					undefined,
-					JSON.stringify({ fileID: bytesToHex(await d.getLocation()) }),
-					async (b) => JSON.parse(new TextDecoder("utf8").decode(await new Response(b).arrayBuffer())).fileDownloadUrl,
+		if (this._started) {
+			return this._output
+		}
+
+		this._started = true
+		this._timestamps.start = Date.now()
+
+		const ping = await this.config.net
+			.GET(this.config.storageNode + "", undefined, undefined, async (d) =>
+				new TextDecoder("utf8").decode(await new Response(d).arrayBuffer()),
+			)
+			.catch(this._reject)
+
+		// server didn't respond
+		if (!ping) {
+			return
+		}
+
+		const d = this
+
+		if (this._beforeDownload) {
+			await this._beforeDownload(d)
+		}
+
+		const fileHandle = this._fileMeta.private.handle
+
+		const metadata = await this._accountSystem.getFileMetadataLocationByFileHandle(fileHandle)
+		if (!metadata) {
+			return
+		}
+
+		d._size = metadata.size
+		d._sizeOnFS = sizeOnFS(metadata.size)
+		d._numberOfBlocks = 1
+		d._numberOfParts = numberOfPartsOnFS(d._sizeOnFS)
+
+		d.dispatchEvent(
+			new DownloadStartedEvent({
+				time: this._timestamps.start,
+			}),
+		)
+
+		const netQueue = new OQ<void>(this.config.queueSize!.net)
+		const decryptQueue = new OQ<Uint8Array | undefined>(this.config.queueSize!.decrypt)
+
+		d._netQueue = netQueue
+		d._decryptQueue = decryptQueue
+
+		let partIndex = 0
+
+		d._output = new ReadableStream<Uint8Array>({
+			async pull (controller) {
+				if (d._cancelled || d._errored) {
+					return
+				}
+
+				if (partIndex >= d._numberOfParts!) {
+					return
+				}
+
+				netQueue.add(
+					partIndex,
+					async (partIndex) => {
+						if (d._cancelled || d._errored) {
+							return
+						}
+
+
+						d.dispatchEvent(new SiaDownloadPartStartedEvent({ index: partIndex }))
+
+						const res = await d.config.net
+						.POST(
+							d.config.storageNode + "/api/v2/sia/download",
+							undefined,
+							JSON.stringify({ fileID: bytesToHex(await d.getLocation()) }),
+							async (b) => JSON.parse(new TextDecoder("utf8").decode(await new Response(b).arrayBuffer())).fileDownloadUrl,
+						)
+						.catch(d._reject)
+		
+		
+
+						if (!res || !res.data) {
+							return
+						}
+
+						const fileData = res.data
+
+						let l = 0
+						fileData
+							.pipeThrough(
+								new TransformStream<Uint8Array, Uint8Array>({
+									// log progress
+									transform (chunk, controller) {
+										d.dispatchEvent(new SiaDownloadBlockStartedEvent({ index: 1 }))
+										controller.enqueue(chunk)
+									},
+								}) as ReadableWritablePair<Uint8Array, Uint8Array>,
+							)
+							.pipeThrough(new Uint8ArrayChunkStream(d._sizeOnFS))
+							.pipeTo(
+								new WritableStream<Uint8Array>({
+									async write (part) {
+											decryptQueue.add(
+												1,
+												async (blockIndex) => {
+													if (d._cancelled || d._errored) {
+														return
+													}
+
+													const decrypted = await d.config.crypto
+														.decrypt(await d.getEncryptionKey(), part)
+														.catch(d._reject)
+
+													if (!decrypted) {
+														return
+													}
+
+													return decrypted
+												},
+												async (decrypted, blockIndex) => {
+													if (!decrypted) {
+														return
+													}
+
+													controller.enqueue(decrypted)
+
+													d.dispatchEvent(new SiaDownloadBlockFinishedEvent({ index: blockIndex }))
+													d.dispatchEvent(new DownloadProgressEvent({ progress: blockIndex / d._numberOfBlocks! }))
+												},
+											)
+									},
+								}) as WritableStream<Uint8Array>,
+							)
+
+						await decryptQueue.waitForCommit(1)
+
+						d.dispatchEvent(new SiaDownloadPartFinishedEvent({ index: partIndex }))
+					},
+					() => {},
 				)
-				.catch(d._reject)
+			},
+			async start (controller) {
+				netQueue.add(
+					1,
+					() => {},
+					async () => {
+						netQueue.close()
+					},
+				)
 
-			if (!downloadUrlRes) {
-				return
-			}
+				decryptQueue.add(
+					1,
+					() => {},
+					async () => {
+						decryptQueue.close()
+					},
+				)
 
-			const fileData = downloadUrlRes.data
+				// the start function is blocking for pulls so this must not be awaited
+				Promise.all([netQueue.waitForClose(), decryptQueue.waitForClose()]).then(async () => {
+					if (d._afterDownload) {
+						await d._afterDownload(d).catch(d._reject)
+					}
 
-			return fileData
-		})
+					d._resolve()
+					controller.close()
+				})
+			},
+			cancel () {
+				d._cancelled = true
+			},
+		}) as ReadableStream<Uint8Array>
+
+		return d._output
 	}
 
 

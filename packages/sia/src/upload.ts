@@ -6,16 +6,8 @@ import { CryptoMiddleware, NetworkMiddleware } from "@opacity/middleware";
 import { extractPromise } from "@opacity/util/src/promise";
 import { FileMeta } from "@opacity/filesystem-access/src/filemeta";
 import { getPayload, getPayloadFD } from "@opacity/util/src/payload";
-import {
-  ISiaUploadEvents,
-  SiaUploadPartStartedEvent,
-} from "./events";
-import {
-  IUploadEvents,
-  UploadFinishedEvent,
-  UploadMetadataEvent,
-  UploadStartedEvent,
-} from "@opacity/filesystem-access/src/events";
+import { ISiaUploadEvents, SiaUploadPartStartedEvent } from "./events";
+import { IUploadEvents, UploadFinishedEvent, UploadMetadataEvent, UploadStartedEvent } from "@opacity/filesystem-access/src/events";
 import { numberOfPartsOnFS } from "@opacity/util/src/parts";
 import { OQ } from "@opacity/util/src/oqueue";
 import { Retry } from "@opacity/util/src/retry";
@@ -289,7 +281,7 @@ export class SiaUpload extends EventTarget implements Uploader, IUploadEvents, I
     let partIndex = 0;
 
     const partCollector = new Uint8ArrayChunkStream(
-      u._sizeOnFS,
+      u._sizeOnFS, // will be updated chunk stream based
       new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize!.net! * u._sizeOnFS + 1 }),
       new ByteLengthQueuingStrategy({ highWaterMark: this.config.queueSize!.net! * u._sizeOnFS + 1 })
     );
@@ -307,7 +299,6 @@ export class SiaUpload extends EventTarget implements Uploader, IUploadEvents, I
       new WritableStream<Uint8Array>({
         async write(part) {
           u.dispatchEvent(new SiaUploadPartStartedEvent({ index: partIndex }));
-          const p = new Uint8Array(sizeOnFS(u._sizeOnFS));
 
           const res = await new Retry(
             async () => {
@@ -317,7 +308,7 @@ export class SiaUpload extends EventTarget implements Uploader, IUploadEvents, I
                   fileHandle: bytesToHex(await u.getLocation()),
                 },
                 extraPayload: {
-                  fileData: p,
+                  fileData: part,
                 },
               });
 
@@ -360,7 +351,7 @@ export class SiaUpload extends EventTarget implements Uploader, IUploadEvents, I
           .POST(u.config.storageNode + "/api/v2/sia/upload-status", {}, JSON.stringify(data))
           .catch(u._reject)) as void;
 
-        // console.log(res)
+        console.log(res)
 
         netQueue.close();
       }

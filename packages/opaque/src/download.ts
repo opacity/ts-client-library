@@ -242,7 +242,7 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		})
 	}
 
-	async getMetadata (): Promise<FileMeta | undefined> {
+	async getMetadata (): Promise<FileMeta | any> {
 		return this._m.runExclusive(async () => {
 			if (this._fileMeta) {
 				return this._fileMeta
