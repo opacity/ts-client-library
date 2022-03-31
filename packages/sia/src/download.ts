@@ -15,11 +15,11 @@ import {
 import { extractPromise } from "@opacity/util/src/promise"
 import { FileMeta } from "@opacity/filesystem-access/src/filemeta"
 import {
-	IOpaqueDownloadEvents,
-	OpaqueDownloadBlockFinishedEvent,
-	OpaqueDownloadBlockStartedEvent,
-	OpaqueDownloadPartFinishedEvent,
-	OpaqueDownloadPartStartedEvent,
+	ISiaDownloadEvents,
+	SiaDownloadBlockFinishedEvent,
+	SiaDownloadBlockStartedEvent,
+	SiaDownloadPartFinishedEvent,
+	SiaDownloadPartStartedEvent,
 } from "./events"
 import { OQ } from "@opacity/util/src/oqueue"
 import {
@@ -30,9 +30,9 @@ import {
 } from "@opacity/util/src/streams"
 import { serializeEncrypted } from "@opacity/util/src/serializeEncrypted"
 import { Uint8ArrayChunkStream } from "@opacity/util/src/streams"
-import { FileMetadata } from "@opacity/account-system/src"
+import { AccountSystem, FileMetadata } from "@opacity/account-system/src"
 
-export type OpaqueDownloadConfig = {
+export type SiaDownloadConfig = {
 	storageNode: string
 
 	crypto: CryptoMiddleware
@@ -44,17 +44,18 @@ export type OpaqueDownloadConfig = {
 	}
 }
 
-export type OpaqueDownloadArgs = {
-	config: OpaqueDownloadConfig
+export type SiaDownloadArgs = {
+	config: SiaDownloadConfig
 	handle: Uint8Array
 	name: string
 	fileMeta: FileMetadata
+	accountSystem: AccountSystem
 }
 
-export class OpaqueDownload extends EventTarget implements Downloader, IDownloadEvents, IOpaqueDownloadEvents {
+export class SiaDownload extends EventTarget implements Downloader,  IDownloadEvents, ISiaDownloadEvents {
 	readonly public = false
 
-	config: OpaqueDownloadConfig
+	config: SiaDownloadConfig
 
 	_m = new Mutex()
 
@@ -73,7 +74,6 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 	_errored = false
 	_started = false
 	_done = false
-	_paused = false
 
 	get cancelled () {
 		return this._cancelled
@@ -87,12 +87,6 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 	get done () {
 		return this._done
 	}
-	get paused () {
-		return this._paused
-	}
-
-	_unpaused = Promise.resolve()
-	_unpause?: (value: void) => void
 
 	_finished: Promise<void>
 	_resolve: (value?: void) => void
@@ -118,8 +112,9 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		return this._sizeOnFS
 	}
 
-	_downloadUrl?: string
 	_metadata?: FileMeta
+	_accountSystem? : AccountSystem | any
+
 
 	_netQueue?: OQ<void>
 	_decryptQueue?: OQ<Uint8Array>
@@ -146,34 +141,11 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		return this._timestamps.pauseDuration
 	}
 
-	_beforeDownload?: (d: Downloader) => Promise<void>
-	_afterDownload?: (d: Downloader) => Promise<void>
+	_beforeDownload?: (d: Downloader | any) => Promise<void>
+	_afterDownload?: (d: Downloader | any) => Promise<void>
 
-	async pause () {
-		if (this._paused) {
-			return
-		}
 
-		const t = Date.now()
-
-		const [unpaused, unpause] = extractPromise()
-		this._unpaused = unpaused
-		this._unpause = () => {
-			this._timestamps.pauseDuration += Date.now() - t
-			unpause()
-		}
-		this._paused = true
-	}
-
-	async unpause () {
-		if (this._unpause) {
-			this._unpause()
-			this._unpause = undefined
-			this._paused = false
-		}
-	}
-
-	constructor ({ config, handle, name, fileMeta }: OpaqueDownloadArgs) {
+	constructor ({ config, handle, name, fileMeta, accountSystem }: SiaDownloadArgs) {
 		super()
 
 		this.config = config
@@ -187,6 +159,7 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 		this._name = name
 
 		this._fileMeta = fileMeta
+		this._accountSystem = accountSystem
 
 		const d = this
 
@@ -211,78 +184,6 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 
 			rejectFinished(err)
 		}
-	}
-
-	async getDownloadUrl (): Promise<string | undefined> {
-		return this._m.runExclusive(async () => {
-			if (this._downloadUrl) {
-				return this._downloadUrl
-			}
-
-			const d = this
-
-			const downloadUrlRes = await d.config.net
-				.POST(
-					d.config.storageNode + "/api/v1/download",
-					undefined,
-					JSON.stringify({ fileID: bytesToHex(await d.getLocation()) }),
-					async (b) => JSON.parse(new TextDecoder("utf8").decode(await new Response(b).arrayBuffer())).fileDownloadUrl,
-				)
-				.catch(d._reject)
-
-			if (!downloadUrlRes) {
-				return
-			}
-
-			const downloadUrl = downloadUrlRes.data
-
-			this._downloadUrl = downloadUrl
-
-			return downloadUrl
-		})
-	}
-
-	async getMetadata (): Promise<FileMeta | any> {
-		return this._m.runExclusive(async () => {
-			if (this._fileMeta) {
-				return this._fileMeta
-			}
-			if (this._metadata) {
-				return this._metadata
-			}
-
-			const d = this
-
-			if (!this._downloadUrl) {
-				await this.getDownloadUrl()
-			}
-
-			const metadataRes = await d.config.net
-				.GET(
-					this._downloadUrl + "/metadata",
-					undefined,
-					undefined,
-					async (b) =>
-						await serializeEncrypted<FileMeta>(
-							d.config.crypto,
-							new Uint8Array(await new Response(b).arrayBuffer()),
-							await d.getEncryptionKey(),
-						),
-				)
-				.catch(d._reject)
-
-			if (!metadataRes) {
-				return
-			}
-
-			const metadata = metadataRes.data
-			// old uploads will not have this defined
-			metadata.lastModified = metadata.lastModified || Date.now()
-			d._metadata = metadata
-			this.dispatchEvent(new DownloadMetadataEvent({ metadata }))
-
-			return metadata
-		})
 	}
 
 	async start (): Promise<ReadableStream<Uint8Array> | undefined> {
@@ -314,20 +215,16 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 			await this._beforeDownload(d)
 		}
 
-		const downloadUrl = await d.getDownloadUrl().catch(d._reject)
-		console.log(downloadUrl, '----')
-		if (!downloadUrl) {
-			return
-		}
+		const fileHandle = this._fileMeta.private.handle
 
-		const metadata = await d.getMetadata().catch(d._reject)
+		const metadata = await this._accountSystem.getFileMetadataLocationByFileHandle(fileHandle)
 		if (!metadata) {
 			return
 		}
 
 		d._size = metadata.size
 		d._sizeOnFS = sizeOnFS(metadata.size)
-		d._numberOfBlocks = numberOfBlocks(d._size)
+		d._numberOfBlocks = 1
 		d._numberOfParts = numberOfPartsOnFS(d._sizeOnFS)
 
 		d.dispatchEvent(
@@ -355,72 +252,56 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 				}
 
 				netQueue.add(
-					partIndex++,
+					partIndex,
 					async (partIndex) => {
 						if (d._cancelled || d._errored) {
 							return
 						}
 
-						await d._unpaused
 
-						d.dispatchEvent(new OpaqueDownloadPartStartedEvent({ index: partIndex }))
+						d.dispatchEvent(new SiaDownloadPartStartedEvent({ index: partIndex }))
 
 						const res = await d.config.net
-							.GET(
-								downloadUrl + "",
-								{
-									range: `bytes=${partIndex * partSizeOnFS}-${
-										Math.min(d._sizeOnFS!, (partIndex + 1) * partSizeOnFS) - 1
-									}`,
-								},
-								undefined,
-								async (rs) => (rs ? (polyfillReadableStreamIfNeeded(rs) as ReadableStream<Uint8Array>) : undefined),
-							)
-							.catch(d._reject)
+						.POST(
+							d.config.storageNode + "/api/v2/sia/download",
+							undefined,
+							JSON.stringify({ fileID: bytesToHex(await d.getLocation()) }),
+							async (b) => JSON.parse(new TextDecoder("utf8").decode(await new Response(b).arrayBuffer())).fileDownloadUrl,
+						)
+						.catch(d._reject)
+		
+		
 
 						if (!res || !res.data) {
 							return
 						}
 
+						const fileData = res.data
+
 						let l = 0
-						res.data
+						fileData
 							.pipeThrough(
 								new TransformStream<Uint8Array, Uint8Array>({
 									// log progress
 									transform (chunk, controller) {
-										for (
-											let i = Math.floor(l / blockSizeOnFS);
-											i < Math.floor((l + chunk.length) / blockSizeOnFS);
-											i++
-										) {
-											d.dispatchEvent(new OpaqueDownloadBlockStartedEvent({ index: partIndex * blocksPerPart + i }))
-										}
-
-										l += chunk.length
-
+										d.dispatchEvent(new SiaDownloadBlockStartedEvent({ index: 1 }))
 										controller.enqueue(chunk)
 									},
 								}) as ReadableWritablePair<Uint8Array, Uint8Array>,
 							)
-							.pipeThrough(new Uint8ArrayChunkStream(partSizeOnFS))
+							.pipeThrough(new Uint8ArrayChunkStream(d._sizeOnFS))
 							.pipeTo(
 								new WritableStream<Uint8Array>({
 									async write (part) {
-										for (let i = 0; i < numberOfBlocksOnFS(part.length); i++) {
 											decryptQueue.add(
-												partIndex * blocksPerPart + i,
+												1,
 												async (blockIndex) => {
 													if (d._cancelled || d._errored) {
 														return
 													}
 
-													let bi = blockIndex % blocksPerPart
-
-													await d._unpaused
-
-													const block = part.slice(bi * blockSizeOnFS, (bi + 1) * blockSizeOnFS)
 													const decrypted = await d.config.crypto
-														.decrypt(await d.getEncryptionKey(), block)
+														.decrypt(await d.getEncryptionKey(), part)
 														.catch(d._reject)
 
 													if (!decrypted) {
@@ -436,25 +317,24 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 
 													controller.enqueue(decrypted)
 
-													d.dispatchEvent(new OpaqueDownloadBlockFinishedEvent({ index: blockIndex }))
+													d.dispatchEvent(new SiaDownloadBlockFinishedEvent({ index: blockIndex }))
 													d.dispatchEvent(new DownloadProgressEvent({ progress: blockIndex / d._numberOfBlocks! }))
 												},
 											)
-										}
 									},
 								}) as WritableStream<Uint8Array>,
 							)
 
-						await decryptQueue.waitForCommit(Math.min((partIndex + 1) * blocksPerPart, d._numberOfBlocks!) - 1)
+						await decryptQueue.waitForCommit(1)
 
-						d.dispatchEvent(new OpaqueDownloadPartFinishedEvent({ index: partIndex }))
+						d.dispatchEvent(new SiaDownloadPartFinishedEvent({ index: partIndex }))
 					},
 					() => {},
 				)
 			},
 			async start (controller) {
 				netQueue.add(
-					d._numberOfParts!,
+					1,
 					() => {},
 					async () => {
 						netQueue.close()
@@ -462,7 +342,7 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 				)
 
 				decryptQueue.add(
-					numberOfBlocks(d._size!),
+					1,
 					() => {},
 					async () => {
 						decryptQueue.close()
@@ -486,6 +366,7 @@ export class OpaqueDownload extends EventTarget implements Downloader, IDownload
 
 		return d._output
 	}
+
 
 	async finish () {
 		return this._finished
